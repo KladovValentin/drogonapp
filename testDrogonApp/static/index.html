@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang = "en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width">
+
+    <title>smart control system</title>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300|Bitter|Ubuntu+Mono' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="style.css">
+    <style>
+      
+    </style>
+
+    <!-- Load plotly.js into the DOM -->
+	  <script src='https://cdn.plot.ly/plotly-2.24.1.min.js'></script>
+  </head>
+
+  <body>
+    <div id='plotlyChart'><!-- Plotly chart will be drawn inside this DIV --></div>
+
+
+    <div class = "button" id = "button1">Button1</div>
+    <div class = "button" id = "button2">Button2</div>
+    <div class = "button" id = "button3">Button3</div>
+
+    <script src="handleButtons.js"></script>
+  </body>
+
+</html>

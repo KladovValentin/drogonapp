@@ -1,0 +1,110 @@
+@startuml dia
+
+
+
+class MainController extends drogon::HttpController{
+    -serverData: ServerData
+    -epicsHandler: EpicsHandler
+    -triggerHandler: TriggerHandler
+    -neuralNetwork: NeuralNetwork
+    -baseController: BaseController
+
+    +get/set Settings()
+    +makeTriggerTable()
+    +makeEpicsTable()
+    +retrainModel()
+    +getPrediction()
+    +getContinuousPrediction()
+    +getVectorForTrainingChecks()
+    +getPredictedList()
+    +other control functions()
+}
+
+class BaseController {
+    -hisograms
+    -histOutFile
+    -*serverData
+    -*epicsHandler
+    -*triggerHandler
+    -*neuralNetwork
+    +compareTargetPredictionFromTraining()
+    +makeNNInputTensor(int): vector
+    +moveForwardCurrentNNInput()
+}
+
+class NeuralNetwork {
+    -mSession: Ort::Session
+    -other ONNX parameters
+    -meanValues: vector
+    -stdValues: vector
+    -additionalFilters: vector
+
+    +setupNNPredictions()
+    +getPrediction(vector)
+    +drawInputTargetCorrelations()
+    +drawTargetSectorComparison()
+    +remakeInputDataset()
+    +retrainModel()
+}
+
+class EpicsHandler {
+    -channel_ids: vector
+    -channel_names: vector
+    -pqxxConnection: pqxx::connection
+    -listeningPort: int
+
+    +remakeChannelIds()
+    +changeChannelNames()
+    +changeListeningPort()
+    +getDBdata(run, runNext)
+    +getDBdata(date1, date2)
+    +makeTableWithEpicsData(run1, run2)
+}
+
+class TriggerHandler {
+    -channel_ids: vector
+    -histsLocation: string
+    
+    +changeChannels()
+    +changeHistsLocation()
+    +getTriggerData(run)
+    +getTriggerData(date1, date2)
+    +makeTableWithTriggerData(run1, run2)
+
+}
+
+class ServerData {
+    -Settings
+    -runBorders
+    -currentNNInput
+    -predictedValues
+
+    +get/set settings()
+    +getRunBordres()
+    +get/set currentNNInput()
+    +get/append predictedValues()
+}
+
+
+
+
+MainController -->  BaseController : uses
+
+MainController -->  NeuralNetwork : uses
+
+MainController -->  EpicsHandler: uses
+
+MainController -->  TriggerHandler: uses
+
+MainController -->  ServerData: uses
+
+
+BaseController --> NeuralNetwork
+
+BaseController --> EpicsHandler
+
+BaseController --> TriggerHandler
+
+BaseController --> ServerData
+
+@enduml

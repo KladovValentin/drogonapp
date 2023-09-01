@@ -1,0 +1,11 @@
+/home/localadmin_jmesschendorp/lustre/hades/dst/feb22/gen2/
+78  79  80  117  118  
+epics channels
+HAD:MDC:GAS:reflowPressureAthm HAD:MDC:PS:05:GETVOLTS HAD:MDC:GAS:CO2:concentration HAD:MDC:P3:S1:p_delta HAD:MDC:GAS:P1:H2O HAD:MDC:GAS:DewPointMeter HAD:MDC:P1:S1:M1:temp
+HAD:MDC:GAS:reflowPressureAthm HAD:MDC:PS:05:GETVOLTS HAD:MDC:GAS:CO2:concentration HAD:MDC:P3:S2:p_delta HAD:MDC:GAS:P1:H2O HAD:MDC:GAS:DewPointMeter HAD:MDC:P1:S2:M1:temp
+HAD:MDC:GAS:reflowPressureAthm HAD:MDC:PS:05:GETVOLTS HAD:MDC:GAS:CO2:concentration HAD:MDC:P3:S3:p_delta HAD:MDC:GAS:P1:H2O HAD:MDC:GAS:DewPointMeter HAD:MDC:P1:S3:M1:temp
+HAD:MDC:GAS:reflowPressureAthm HAD:MDC:PS:05:GETVOLTS HAD:MDC:GAS:CO2:concentration HAD:MDC:P3:S4:p_delta HAD:MDC:GAS:P1:H2O HAD:MDC:GAS:DewPointMeter HAD:MDC:P1:S4:M1:temp
+HAD:MDC:GAS:reflowPressureAthm HAD:MDC:PS:05:GETVOLTS HAD:MDC:GAS:CO2:concentration HAD:MDC:P3:S5:p_delta HAD:MDC:GAS:P1:H2O HAD:MDC:GAS:DewPointMeter HAD:MDC:P1:S5:M1:temp
+HAD:MDC:GAS:reflowPressureAthm HAD:MDC:PS:05:GETVOLTS HAD:MDC:GAS:CO2:concentration HAD:MDC:P3:S6:p_delta HAD:MDC:GAS:P1:H2O HAD:MDC:GAS:DewPointMeter HAD:MDC:P1:S6:M1:temp
+listening port
+3335
