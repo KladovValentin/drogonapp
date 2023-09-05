@@ -39,15 +39,28 @@ def load_dataset(config, dataTable):
             yi = []
             if i<(sentenceLength-1):
                 for j in range(sentenceLength-i-1):
-                    xi.append(dfn[0,:-1])
-                    yi.append(dfn[0,-1])
+                    xii = []
+                    for s in range(7):
+                        xii.append(dfn[0,6*(s)+3])
+                    xi.append(xii)
+                    #xi.append(dfn[0,:-1])
+                    yi.append(dfn[0,-3])
                 for j in range(i+1):
-                    yi.append(dfn[j,-1])
-                    xi.append(dfn[j,:-1])
+                    xii = []
+                    for s in range(7):
+                        xii.append(dfn[j,6*(s)+3])
+                    xi.append(xii)
+                    #xi.append(dfn[j,:-1])
+                    yi.append(dfn[j,-3])
+                    
             else:
                 for j in range(sentenceLength):
-                    xi.append(dfn[i-sentenceLength+1+j,:-1])
-                    yi.append(dfn[i-sentenceLength+1+j,-1])
+                    xii = []
+                    for s in range(7):
+                        xii.append(dfn[i-sentenceLength+1+j,6*(s)+3])
+                    xi.append(xii)
+                    #xi.append(dfn[i-sentenceLength+1+j,:-1])
+                    yi.append(dfn[i-sentenceLength+1+j,-3])
             x.append(xi)
             y.append(yi)
         x = np.array(x).astype(np.float32)
@@ -62,38 +75,29 @@ def load_dataset(config, dataTable):
             if i<(sentenceLength-1):
                 for j in range(sentenceLength-i-1):
                     xii = []
-                    yii = []
-                    for s in range(6):
-                        xii.append(dfn[0,7*(s):7*(s+1)])
-                        yii.append(dfn[0,-6+s])
-                    xiii = []
-                    xiii.append(xii)
-                    xi.append(xiii)
+                    yii = dfn[0,-3:-2]
+                    for s in range(7):
+                        xii.append(dfn[0,6*(s)+3:6*(s)+4])
+                    xi.append(xii)
                     yi.append(yii)
                 for j in range(i+1):
                     xii = []
-                    yii = []
-                    for s in range(6):
-                        xii.append(dfn[j,7*(s):7*(s+1)])
-                        yii.append(dfn[j,-6+s])
-                    xiii = []
-                    xiii.append(xii)
-                    xi.append(xiii)
+                    yii = dfn[j,-3:-2]
+                    for s in range(7):
+                        xii.append(dfn[j,6*(s)+3:6*(s)+4])
+                    xi.append(xii)
                     yi.append(yii)
             else:
                 for j in range(sentenceLength):
                     xii = []
-                    yii = []
-                    for s in range(6):
-                        xii.append(dfn[i-sentenceLength+1+j,7*(s):7*(s+1)])
-                        yii.append(dfn[i-sentenceLength+1+j,-6+s])
-                    xiii = []
-                    xiii.append(xii)
-                    xi.append(xiii)
+                    yii = dfn[i-sentenceLength+1+j,-3:-2]
+                    for s in range(7):
+                        xii.append(dfn[i-sentenceLength+1+j,6*(s)+3:6*(s)+4])
+                    xi.append(xii)
                     yi.append(yii)
             x.append(xi)
             y.append(yi)
-        x = np.array(x).astype(np.float32)
+        x = (np.array(x).astype(np.float32))[...,np.newaxis]
         y = np.array(y).astype(np.float32)
 
     elif (config.modelType == "DNN"):
@@ -101,7 +105,7 @@ def load_dataset(config, dataTable):
         y = dfn[:, -1].astype(np.float32)
 
 
-    #print(x)
+    #print(y)
     print('x shape = ' + str(x.shape))
     print('y shape = ' + str(y.shape))
     return (x, y)
@@ -188,17 +192,17 @@ class DataManager():
 
         #self.prepareTable
         dir = str(Path(__file__).parents[1])
-        print(dir)
-        dftCorr = self.getDataset(path + "nn_input/outNNTest.dat", "simLabel")
-        print(dftCorr)
+        #print(dir)
+        dftCorr = self.getDataset(path + "nn_input/outNNTest1.dat", "simLabel")
+        #print(dftCorr)
 
         dftTV = dftCorr.iloc[:int(dftCorr.shape[0]*0.7)].copy()
         dftTrainV = dftTV.iloc[:int(dftTV.shape[0]*0.7)].copy()
         dftTest = dftTV.drop(dftTrainV.index)
         dftCorr = dftTrainV.copy()
 
-        print(dftCorr)
-        print(dftTest)
+        #print(dftCorr)
+        #print(dftTest)
         #print(dftCorr)
 
         mean, std = 0, 0

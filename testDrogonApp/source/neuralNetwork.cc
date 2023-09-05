@@ -238,7 +238,9 @@ void NeuralNetwork::drawTargetSectorComparison(){
 
 void NeuralNetwork::remakeInputDataset(){
     //vector< pair< string, vector<double> > > table = readDBTableFromFile(saveLocation+"info_tables/MDCALL1.dat");
-    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL1.dat");
+    cout << "starting reading tables" << endl;
+    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");
+    cout << "table mdc is read" << endl;
     vector< pair< int, vector<double> > > tableTrig = readClbTableFromFile(saveLocation+"info_tables/trigger_data2.dat");
     vector< pair< int, vector<double> > > tableClb = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDC1New.dat");
     vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCAllNew.dat"); 

@@ -19,7 +19,10 @@ class ServerData {
         int epicsDBPort;
 
         vector<int> trigChannels;
-        vector<string> dbNames;
+        //vector<string> dbNames;
+        vector< pair <string, string> > dbNames;
+        vector<size_t> dbShape;
+
 
         vector<int> runBorders;
         vector<float> currentNNInput;
@@ -41,7 +44,8 @@ class ServerData {
         string getTrHistsLoc(){ return triggerHistsPath; }
         int getDbListeningPort(){ return epicsDBPort; }
         vector<int> getTrChannels(){ return trigChannels; }
-        vector<string> getDbChannels(){ return dbNames; } 
+        vector< pair <string, string> > getDbChannels(){ return dbNames; } 
+        vector<size_t> getDbShape(){  return dbShape; }
         vector<int> getRunList(){ return runBorders; }
         vector<float> getCurrentNNInput(){ return currentNNInput; }
         int getCurrentRun(){ return runBorders[currentRunIndex]; }
@@ -52,7 +56,7 @@ class ServerData {
         void setTrHistsLoc(string newLoc){ triggerHistsPath = newLoc; }
         void setDbListeningPort(int newPort){ epicsDBPort = newPort; }
         void setTrChannels(vector<int> newChannels){ trigChannels = newChannels; }
-        void setDbChannels(vector<string> newChannels){ dbNames = newChannels; }
+        void setDbChannels(vector<size_t> newShape, vector< pair <string, string> > newChannels){ dbNames = newChannels; dbShape = newShape; }
         void setCurrentNNInput(vector<float> newNNInput) {currentNNInput = newNNInput; }
         void setCurrentRunIndex(int newCurrentRunIndex) {currentRunIndex = newCurrentRunIndex; } 
         void setPredictedValues(map<int, float> newValues) { predictedValues = newValues;}

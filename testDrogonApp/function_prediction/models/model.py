@@ -125,7 +125,7 @@ class Conv2dLSTMCell(nn.Module):
             raise ValueError("Invalid kernel size.")
 
         self.bias = bias
-        self.x2h = nn.Conv2d(in_channels=input_size,
+        self.x2h = nn.Conv2d(in_channels=input_size[0],
                              out_channels=hidden_size * 4,
                              kernel_size=self.kernel_size,
                              padding=self.padding,
@@ -136,8 +136,8 @@ class Conv2dLSTMCell(nn.Module):
                              kernel_size=self.kernel_size,
                              padding=self.padding,
                              bias=bias)
-        #self.Wc = None
-        self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, 6, 7)))
+        
+        self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, input_size[1], input_size[2])))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -154,11 +154,11 @@ class Conv2dLSTMCell(nn.Module):
         #       hy: of shape (batch_size, hidden_size, height_size, width_size)
         #       cy: of shape (batch_size, hidden_size, height_size, width_size)
 
-        if self.Wc == None:
-            self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, input.size(2), input.size(3))))
+        #if self.Wc == 1:
+        #    self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, input.size(2), input.size(3))))
 
         if hx is None:
-            hx = Variable(input.new_zeros(input.size(0), self.hidden_size, input.size(2), input.size(3)))
+            hx = Variable(input.new_zeros(input.size(0), self.hidden_size, self.input_size[1], self.input_size[2]))
             hx = (hx, hx)
         hx, cx = hx
 
@@ -185,14 +185,15 @@ class Conv2dLSTMCell(nn.Module):
         return (hy, cy)
 
 
-
-
 class Conv2dLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, kernel_size, num_layers, bias, output_size):
+    def __init__(self, input_size, embedding_size, hidden_size, kernel_size, num_layers, bias, output_size):
         super(Conv2dLSTM, self).__init__()
 
-        self.input_size = input_size
+        self.input_size = input_size[0]
+        self.embedding_size = embedding_size
         self.hidden_size = hidden_size
+        self.height = input_size[1]
+        self.width = input_size[2]
 
         if type(kernel_size) == tuple and len(kernel_size) == 2:
             self.kernel_size = kernel_size
@@ -207,7 +208,7 @@ class Conv2dLSTM(nn.Module):
         self.bias = bias
         self.output_size = output_size
 
-        self.rnn_cell_list = nn.ModuleList([Conv2dLSTMCell(self.input_size,
+        self.rnn_cell_list = nn.ModuleList([Conv2dLSTMCell((self.embedding_size,self.height,self.width),
                                             self.hidden_size,
                                             self.kernel_size,
                                             self.bias) for _ in range(self.num_layers)])
@@ -226,17 +227,74 @@ class Conv2dLSTM(nn.Module):
         #                     bias=self.bias)
         #self.conv1 = nn.Conv2d(in_channels=self.hidden_size, out_channels=1, kernel_size=(6, 1))
         #self.conv2 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(1, 1))
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=1, kernel_size=(1, 7))
-        self.pool1 = nn.MaxPool2d(kernel_size=(1, 6))
+        self.conv1 = nn.Conv2d(in_channels=self.hidden_size, out_channels=1, kernel_size=(1, 1))
         #self.conv1 = nn.Conv2d(in_channels=self.hidden_size, out_channels=1, kernel_size=(1, 1))
         #self.conv2 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(6, 1))
         #self.conv3 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(1, 1))
+
+        #self.nn_model = nn.ModuleList([nn.Sequential(
+        #    nn.Linear(self.input_size, 256, bias=True),
+        #    nn.BatchNorm1d(256),
+        #    nn.LeakyReLU(inplace=True),
+        #    nn.Linear(256, 256, bias=True),
+        #    nn.BatchNorm1d(256),
+        #    nn.LeakyReLU(inplace=True),
+        #    nn.Linear(256, embedding_size),
+        #    #nn.BatchNorm1d(embedding_dim)
+        #) for _ in range(self.height)])
+
+        #self.nn_model = nn.ModuleList([nn.Sequential(
+        #    nn.Linear(self.input_size, 256, bias=True),
+        #    nn.BatchNorm1d(256),
+        #    nn.LeakyReLU(inplace=True),
+        #    nn.Linear(256, 16),
+        #    #nn.BatchNorm1d(embedding_dim)
+        #) for _ in range(self.height)])
+
+        self.nn_model = nn.Sequential(
+            nn.Linear(self.height * self.width * self.input_size, 256, bias=True),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, 256, bias=True),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, self.height * self.width * self.embedding_size),
+            #nn.BatchNorm1d(embedding_dim)
+        )
 
 
 
     def forward(self, input, hx=None):
 
         batch_size = input.size(0)
+        sentence_length = input.size(1)
+
+        inputDeep = input.movedim(-3,-1)
+
+        #embedded1 = [inputDeep[:,:,i,:,:] for i in range(self.height)]
+        #embedded = torch.Tensor(batch_size, sentence_length, 1, self.width, 16)
+        #for i in range(self.height):
+        #    embedded1[i] = (self.nn_model[i](embedded1[i].reshape((batch_size*sentence_length*self.width, self.input_size))))
+        #    embedded1[i] = embedded1[i].reshape((batch_size, sentence_length, 1, self.width, 16))
+        #    if (i == 0):
+        #        embedded = embedded1[i]
+        #    else:
+        #        embedded = torch.cat((embedded, embedded1[i]), dim=2)
+
+        #embedded = embedded.reshape((batch_size*sentence_length*self.height*self.width, 16))
+        #embedded = (self.nn_model2(embedded)).reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
+        
+        inputDeep1 = inputDeep.reshape((batch_size*sentence_length, self.height*self.width*self.input_size))
+        embedded = self.nn_model(inputDeep1)
+        embedded = embedded.reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
+
+        #inputDeep1 = inputDeep.reshape((batch_size*sentence_length*self.height*self.width, self.input_size))
+        #print(inputDeep.shape, inputDeep1.shape)
+        #embedded = self.nn_model(inputDeep1)
+        #embedded = embedded.reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
+        embedded = embedded.movedim(-1,-3)
+        #print(embedded.shape, input.shape)
+
 
         # Input of shape (batch_size, seqence length , input_size)
         #
@@ -244,27 +302,27 @@ class Conv2dLSTM(nn.Module):
 
         if hx is None:
             if torch.cuda.is_available():
-                h0 = Variable(torch.zeros(self.num_layers, input.size(0), self.hidden_size, input.size(-2), input.size(-1)).cuda())
+                h0 = Variable(torch.zeros(self.num_layers, input.size(0), self.hidden_size, self.height, self.width).cuda())
             else:
-                h0 = Variable(torch.zeros(self.num_layers, input.size(0), self.hidden_size, input.size(-2), input.size(-1)))
+                h0 = Variable(torch.zeros(self.num_layers, input.size(0), self.hidden_size, self.height, self.width))
         else:
              h0 = hx
 
-        outs = torch.Tensor(batch_size, input.size(1), self.output_size, input.size(-2), input.size(-1))
+        #outs = torch.Tensor(batch_size, input.size(1), self.output_size, self.height, self.width)
 
         hidden = list()
         for layer in range(self.num_layers):
             hidden.append((h0[layer], h0[layer]))
 
         
-        result_tensor = torch.Tensor(batch_size, 1, self.output_size, input.size(-2), input.size(-1))
+        result_tensor = torch.Tensor(batch_size, 1, self.output_size, self.height, self.width)
         for t in range(input.size(1)):
 
             for layer in range(self.num_layers):
 
                 if layer == 0:
                     hidden_l = self.rnn_cell_list[layer](
-                        input[:, t, :],
+                        embedded[:, t, :],
                         (hidden[layer][0],hidden[layer][1])
                         )
                 else:
@@ -280,7 +338,7 @@ class Conv2dLSTM(nn.Module):
             #print (newTensor.shape)
             #newTensor = self.pool1(newTensor)
             #print (newTensor.shape)
-            newTensorI = newTensor.squeeze().unsqueeze(1)
+            newTensorI = newTensor.squeeze().unsqueeze(1).unsqueeze(2)
             if (t == 0):
                 result_tensor = newTensorI
             else:

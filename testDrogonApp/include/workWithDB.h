@@ -33,6 +33,8 @@ class EpicsDBManager {
     protected:
         vector<string> channel_ids;
         vector<string> channel_names;
+        vector<size_t> shape;
+        vector< pair <string, string> > dbnames;
         pqxx::connection* pqxxConnection;
         string base_string;
         string chan_string;
@@ -42,7 +44,7 @@ class EpicsDBManager {
         ~EpicsDBManager();
         
         void remakeChannelIds();
-        void changeChannelNames(vector<string> newNames);
+        void changeChannelNames(vector<size_t> shapeNew, vector< pair <string, string> > dbnamesNew);
         void changeListeningPort(int newPort);
 
         vector<double> getDBdataBase(string command, string dateLeft);        

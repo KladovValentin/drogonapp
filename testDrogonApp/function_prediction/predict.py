@@ -24,11 +24,11 @@ from config import Config
 
 def loadModel(config, input_dim, nClasses, path):
     if (config.modelType == "DNN"):
-        nn_model = DNN(input_dim=input_dim, output_dim=nClasses, nLayers=3, nNeurons=200).type(torch.FloatTensor)
+        nn_model = DNN(input_dim=input_dim[-1], output_dim=nClasses, nLayers=3, nNeurons=200).type(torch.FloatTensor)
     elif (config.modelType == "LSTM"):
-        nn_model = LSTM(input_dim=input_dim, embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
+        nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
     elif (config.modelType == "ConvLSTM"):
-        nn_model = Conv2dLSTM(input_size=1, hidden_size=4, kernel_size=(1,1), num_layers=1, bias=0, output_size=6)
+        nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=4, hidden_size=4, kernel_size=(1,1), num_layers=1, bias=0, output_size=6)
     nn_model.type(torch.FloatTensor)
     nn_model.load_state_dict(torch.load(path+"tempModel.pt"))
     return nn_model
@@ -64,13 +64,13 @@ def makePredicionList(config, experiment_path, savePath, path):
     exp_dataLoader = DataLoader(exp_dataset, batch_size=512, drop_last=False)
 
     mean, std = readTrainData(path)
-    mean = mean[-1]
-    std = std[-1]
+    #mean = mean[-6:]
+    #std = std[-6:]
     
 
     #nClasses = dftCorrExp[list(dftCorrExp.columns)[-1]].nunique()
     nClasses = 1
-    input_dim = exp_dataset[0][0].shape[-1]
+    input_dim = exp_dataset[0][0].shape
 
     #load nn and predict
     nn_model = loadModel(config, input_dim, nClasses, path)
@@ -80,7 +80,10 @@ def makePredicionList(config, experiment_path, savePath, path):
     tepoch = tqdm(exp_dataLoader)
     for i_step, (x, y) in enumerate(tepoch):
         tepoch.set_description(f"Epoch {1}")
-        prediction = (nn_model(x).detach().numpy()[:,-1])*std + mean
+        #prediction = (nn_model(x).detach().numpy()[:,-1])
+        prediction = (nn_model(x).detach().numpy())
+        for i in range(1):
+            prediction[:,i] = prediction[:,i]*std[-3] + mean[-3]
         dat_list.append(pandas.DataFrame(prediction))
 
     fullPredictionList = pandas.concat(list(dat_list),ignore_index=True)
@@ -146,6 +149,7 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
     plt.plot(indexes2, nptable2[:,1], color='#0504aa', label = 'target train', marker='o', linestyle="None", markersize=0.8)
     plt.plot(indexes2, nptable2[:,2], color='#228B22', label = 'prediction train', marker='o', linestyle="None", markersize=0.7)
     #plt.legend(loc=[0.6,0.8])
+    plt.ylim(4, 7.5)
     plt.grid(axis='y', alpha=0.75)
     plt.xlabel('run number')
     plt.ylabel('dE/dx, a.u.')
@@ -167,12 +171,14 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     pT = pandas.read_parquet(predFileName+'.parquet')
     dftCorrExp = pandas.read_parquet(experiment_path+'.parquet').reset_index(drop=True)
     pT.rename(columns={list(pT.columns)[0] : '0'}, inplace=True)
-    #print(pT)
-    #print(dftCorrExp)
+    print(pT)
+    print(dftCorrExp)
 
     localCNames = list(dftCorrExp.columns)
-    for i in range(len(dftCorrExp.columns)-2):
+    for i in range(len(localCNames)-4):
         dftCorrExp.drop(localCNames[i+1],axis=1,inplace=True)
+    for i in range(2):
+        dftCorrExp.drop(localCNames[len(localCNames) -i -1],axis=1,inplace=True)
     dftCorrExp = dftCorrExp.join(pT[list(pT.columns)])
 
 
@@ -181,8 +187,10 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     pTS.rename(columns={list(pTS.columns)[0] : '0'}, inplace=True)
 
     localCNames = list(dftCorrExpS.columns)
-    for i in range(len(dftCorrExpS.columns)-2):
+    for i in range(len(localCNames)-4):
         dftCorrExpS.drop(localCNames[i+1],axis=1,inplace=True)
+    for i in range(2):
+        dftCorrExpS.drop(localCNames[len(localCNames) - i -1],axis=1,inplace=True)
     dftCorrExpS = dftCorrExpS.join(pTS[list(pTS.columns)])
     print(dftCorrExpS)
 

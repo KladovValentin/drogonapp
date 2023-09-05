@@ -21,10 +21,10 @@ MainController::MainController() {
 
     triggerManager->changeHistsLocation(serverData->getTrHistsLoc());
     triggerManager->changeChannels(serverData->getTrChannels());
-    epicsManager->changeChannelNames(serverData->getDbChannels());
-
+    epicsManager->changeChannelNames(serverData->getDbShape(), serverData->getDbChannels());
+    
     controllerBase = new ControllerBase(triggerManager, epicsManager, neuralNetwork, serverData); 
-    cout << "b" << endl;
+
     //epicsManager->makeTableWithEpicsData("new", 444140006, 1e9);
     neuralNetwork->remakeInputDataset();
     //neuralNetwork->retrainModel();
@@ -86,7 +86,7 @@ void MainController::setTriggerChannels(const HttpRequestPtr &req, std::function
 
 void MainController::setSettings(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback, string newTrHistsLoc, vector<int> newTrChannels, vector<string> newDBChannels){
     serverData->setTrHistsLoc(newTrHistsLoc);
-    serverData->setDbChannels(newDBChannels);
+    //serverData->setDbChannels(newDBChannels);
     serverData->setTrChannels(newTrChannels);
     Json::Value ret;
     ret["result"]="ok";
@@ -95,14 +95,14 @@ void MainController::setSettings(const HttpRequestPtr &req, std::function<void (
 }
 void MainController::getSettings(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback){
     string histsLocation = serverData->getTrHistsLoc();
-    vector<string> channelsdb = serverData->getDbChannels();
+    vector< pair <string, string> > channelsdb = serverData->getDbChannels();
     vector<int> channelstr = serverData->getTrChannels();
     Json::Value ret;
     ret["histsLocation"] = histsLocation;
     for (const auto& value : channelstr)
         ret["channelsTr"].append(value);
     for (const auto& value : channelsdb)
-        ret["channelsDb"].append(value);
+        ret["channelsDb"].append(value.second);
     auto resp=HttpResponse::newHttpJsonResponse(ret);
     callback(resp);
 }

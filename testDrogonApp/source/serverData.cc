@@ -35,21 +35,34 @@ void ServerData::readSettings(){
 
     std::getline(fin0, line);
     if (line == "epics channels"){
+        
+        std::getline(fin0, line);
+        std::stringstream ssShape(line);
+        size_t shapeEl;
+        dbShape.clear();
+        while (ssShape >> shapeEl)
+            dbShape.push_back(shapeEl);
+        
         dbNames.clear();
         while (1){
             std::getline(fin0, line);
             if (line == "listening port")
                 break;
             std::stringstream ss1(line);
-            string dbname;
-            while (ss1 >> dbname) {
-                dbNames.push_back(dbname);
-                //cout << dbname << endl;
+            string multi, dbname;
+            ss1 >> multi >> dbname;
+            if (multi != "0" && multi != "1"){
+                continue;
             }
+            //if (((TString)dbname).Contains("%")){
+            //    dbname = (string)(Form(dbname.c_str(),1));
+            //}
+            dbNames.push_back(make_pair(multi, dbname));
+            //cout << dbname << endl;
         }
     }
-    for(string dbname: dbNames){
-        cout << dbname << " ";
+    for(pair <string, string> dbname: dbNames){
+        cout << dbname.second << " ";
     }
     cout << endl;
 
@@ -66,8 +79,8 @@ void ServerData::writeSettings(){
         fout << x << "  ";
     fout << endl;
 
-    for (string x: dbNames)
-        fout << x << "  ";
+    for (pair <string,string> x: dbNames)
+        fout << x.second << "  ";
     fout << endl;
 
     fout << epicsDBPort << endl;

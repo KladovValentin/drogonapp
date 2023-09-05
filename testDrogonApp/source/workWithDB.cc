@@ -37,9 +37,10 @@ EpicsDBManager::~EpicsDBManager(){}
 void EpicsDBManager::remakeChannelIds(){
     channel_ids.clear();
     for (string name: channel_names){
+        //cout << name << endl;
         pqxx::work w(*pqxxConnection);
         pqxx::result rows = w.exec("SELECT channel_id FROM channel WHERE name = '"+name+"'");
-        //cout << "channel " << name << " found! " << rows.begin()["channel_id"].as<int>() << endl;
+        cout << "channel " << name << " found! " << rows.begin()["channel_id"].as<int>() << endl;
         if (rows.size() < 1){
             cout << "channel " << name << " not found!" << endl;
             channel_ids.push_back(0);
@@ -58,8 +59,21 @@ void EpicsDBManager::remakeChannelIds(){
     chan_string = chan_string + ")";
 }
 
-void EpicsDBManager::changeChannelNames(vector<string> newNames){
-    channel_names = newNames;
+void EpicsDBManager::changeChannelNames(vector<size_t> shapeNew, vector< pair <string, string> > dbnamesNew){
+    // transform channel names (with %d and multi) and shape into channelnames vector
+    //shape = {7,6};
+    shape = shapeNew;
+    dbnames = dbnamesNew;
+    channel_names.clear();
+    for (pair<string, string> dbname: dbnames){
+        if (dbname.first == "0")
+            channel_names.push_back(dbname.second);
+        else if (dbname.first == "1")
+            for (size_t i = 0; i < shape[1]; i++)
+                channel_names.push_back((string)(Form(dbname.second.c_str(),i+1)));
+    }
+
+    //channel_names = dbnames;
     remakeChannelIds();
 }
 
@@ -112,12 +126,14 @@ vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
     for (size_t i = 0; i < channel_ids.size(); i++){
         double meani = 0;
 
+        /// fix situation if there are no measurements in the requested t range by getting the last existing entry
         if (resultT[i].size()==0){
             pqxx::work w1(*pqxxConnection);
             pqxx::result rows = w1.exec(base_string + "channel_id=" + channel_ids[i] + " AND float_val!=0 AND smpl_time<='" + prevDate + "' ORDER BY smpl_time DESC LIMIT "+to_string(1));
             double dbValue = rows.begin()["float_val"].as<double>(); 
             meani = dbValue;
         }
+        /// else we can have several measurements which are needed to be averaged
         else {
             for (size_t j = 0; j < resultT[i].size(); j++){
                 meani+=resultT[i][j]/resultT[i].size();
@@ -125,7 +141,28 @@ vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
         }
         result.push_back(meani);
     }
-    return result;
+    cout << result.size() << endl;
+
+    vector<double> resultExpanded;
+    size_t resultIndex = 0;
+    for (size_t i = 0; i< shape[0]; i++){
+        if (dbnames[i].first == "0"){
+            for (size_t j = 0; j < shape[1]; j++){
+                resultExpanded.push_back(result[resultIndex]);
+            }
+            resultIndex += shape[1];
+        }
+        else {
+            for (size_t j = 0; j < shape[1]; j++){
+                resultExpanded.push_back(result[resultIndex]);
+                resultIndex += 1;
+            }
+        }
+    }
+
+    cout << resultExpanded.size() << endl;
+    
+    return resultExpanded;
 }
 
 vector<double> EpicsDBManager::getDBdata(int n, string channel){
@@ -154,24 +191,25 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
 
     std::ofstream fout;
     if (mode == "new") 
-        fout.open((saveLocation+"info_tables/MDCALLSec1.dat").c_str());
+        fout.open((saveLocation+"info_tables/MDCALLSec2.dat").c_str());
     else if (mode == "app") 
-        fout.open((saveLocation+"info_tables/MDCALLSec1.dat").c_str(), std::ios_base::app);
+        fout.open((saveLocation+"info_tables/MDCALLSec2.dat").c_str(), std::ios_base::app);
     
 
 
     size_t i = 0;
     while (i < runBorders.size()-1){
         vector<double> dbPars = getDBdata(runBorders[i],runBorders[i+1]);
-        fout << runBorders[i] << " ";
+        fout << runBorders[i] << "  ";
         for (size_t j = 0; j < dbPars.size(); j++){
-            fout << dbPars[j] << " ";
+            fout << dbPars[j] << "  ";
         } 
         fout << endl;
-        
+
+        /// save intermediate resulting table
         if ((i + 1) % 100 == 0) {
             fout.close();
-            fout.open((saveLocation+"info_tables/MDCALLSec1.dat").c_str(), std::ios_base::app);
+            fout.open((saveLocation+"info_tables/MDCALLSec2.dat").c_str(), std::ios_base::app);
             std::cout << "Saved data up to entry " << (i + 1) << std::endl;
         }
         i++;

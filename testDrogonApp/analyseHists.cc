@@ -69,6 +69,34 @@ double runToDateNumber(int run){
 }
 
 
+void remakeMDCAll1(){
+    std::ifstream fi("serverData/info_tables/MDCALL1.dat");
+    std::ofstream fo("serverData/info_tables/MDCALL12.dat");
+
+    string line1;
+    while (std::getline(fi, line1)) {
+
+        std::istringstream iss1(line1);
+        int run;
+        vector<double> pars;
+        iss1 >> run;
+        double par;
+        while (iss1 >> par){
+            pars.push_back(par);
+        }
+        fo << run << "\t";
+        for (size_t i = 0; i < 7; i++){
+            for (size_t j = 0; j < 6; j++){
+                fo << pars[7*j+i] << "\t";
+            }
+        }
+        fo << endl;
+
+    }
+    fi.close();
+    fo.close();
+}
+
 void remakeMDCALL(){
 
     std::ifstream fileSep("serverData/info_tables/MDCALLSec.dat");

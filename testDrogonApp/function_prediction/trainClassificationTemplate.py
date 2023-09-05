@@ -71,6 +71,8 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
         for i_step, (x, y) in enumerate(train_loader):
             #tepoch.set_description(f"Epoch {epoch}")
             prediction = model(x)
+            #print(*prediction[0][14])
+            #print(*y[0][14])
 
             #print(prediction.shape)
             #print(y.shape)
@@ -181,16 +183,16 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=dropLastT)
         valid_loader = DataLoader(valid_dataset, batch_size=batch_size, drop_last=dropLastV)
 
-        input_dim = train_dataset[0][0].shape[-1]
+        input_dim = train_dataset[0][0].shape
 
         del validTable, valid_dataset, dftCorr
 
         if (config.modelType == "DNN"):
-            nn_model = DNN(input_dim=input_dim, output_dim=1, nLayers=nLayers, nNeurons=nNeurons).type(torch.FloatTensor)
+            nn_model = DNN(input_dim=input_dim[-1], output_dim=1, nLayers=nLayers, nNeurons=nNeurons).type(torch.FloatTensor)
         elif (config.modelType == "LSTM"):
-            nn_model = LSTM(input_dim=input_dim, embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
+            nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
         elif (config.modelType == "ConvLSTM"):
-            nn_model = Conv2dLSTM(input_size=1, hidden_size=4, kernel_size=(1,1), num_layers=1, bias=0, output_size=6)
+            nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=4, hidden_size=4, kernel_size=(1,1), num_layers=1, bias=0, output_size=6)
 
         loss = nn.MSELoss()
 
@@ -211,11 +213,11 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModel.pt")
 
         if (config.modelType == "DNN"):
-            modelRandInput = torch.randn(1, input_dim)
+            modelRandInput = torch.randn(1, input_dim[-1])
         elif (config.modelType == "LSTM"):
-            modelRandInput = torch.randn(1, 15, input_dim)
+            modelRandInput = torch.randn(1, 15, input_dim[-1])
         elif (config.modelType == "ConvLSTM"):
-            modelRandInput = torch.randn(1, 15, 1, 6, input_dim)
+            modelRandInput = torch.randn(1, 15, input_dim[-3], 1, 1)
         torch.onnx.export(nn_model,                                # model being run
                   modelRandInput,    # model input (or a tuple for multiple inputs)
                   mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)
