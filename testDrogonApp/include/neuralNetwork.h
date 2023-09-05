@@ -26,6 +26,8 @@
 #include "TSystem.h"
 #include "TROOT.h"
 #include "TH1.h"
+#include "TH2.h"
+#include "TProfile.h"
 
 using namespace std;
 
@@ -50,6 +52,7 @@ class NeuralNetwork {
         float getPrediction(vector<float> inputTensorValues);   
 
         void drawInputTargetCorrelations(TGraphErrors* target, vector< vector<double> > inputs);
+        void drawInputTargetCorrelations(vector< vector<double> > targets, vector< vector<double> > inputs);
         void drawTargetStability(TGraphErrors* targetsAll, TGraphErrors* targetsPP, TGraphErrors* targetsHH);
         void drawTargetSectorComparison();
 

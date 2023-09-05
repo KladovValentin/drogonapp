@@ -154,6 +154,58 @@ void NeuralNetwork::drawInputTargetCorrelations(TGraphErrors* target, vector< ve
     }
 }
 
+void NeuralNetwork::drawInputTargetCorrelations(vector< vector<double> > targets, vector< vector<double> > inputs){
+
+    vector<double> input, target, inputErr, targetErr;
+    TProfile* prof = new TProfile("prof","profile",200,990,1040);
+    TH2* h2 = new TH2F("h2","h2",100,990,1040,100,4,8);
+    // fill arrays 
+    for (size_t i = 0; i<inputs[0].size(); i++){
+        double run = inputs[0][i];
+        //cout << run << "    " << targets[0][15] << endl;
+        auto ps = std::find(targets[0].begin(), targets[0].end(), run);
+        if (ps != targets[0].end()){
+            int indexs = std::distance(targets[0].begin(), ps);
+            input.push_back(inputs[1][i]);
+            inputErr.push_back(0);
+            target.push_back(targets[1][indexs]);
+            targetErr.push_back(targets[3][indexs]);
+            prof->Fill(inputs[1][i],targets[1][indexs]);
+            h2->Fill(inputs[1][i],targets[1][indexs]);
+            //cout << input[input.size()-1] << "  " << inputErr[input.size()-1] << "  " << target[input.size()-1] << "  " << targetErr[input.size()-1] << "  " << endl;
+        }
+    }
+
+    //cout << inputs[0].size() << 
+
+    TGraphErrors* gr  = new TGraphErrors( input.size(), &input[0], &target[0], &inputErr[0], &targetErr[0]);
+
+    gr->SetMarkerStyle(22);
+    gr->SetMarkerSize(0.5);
+    gr->SetMarkerColor(4);
+    gr->SetLineColor(4);
+    gr->SetLineWidth(1);
+    gr->SetName("gr");
+    gr->GetYaxis()->SetRangeUser(4,8);
+    prof->GetYaxis()->SetRangeUser(4,8);
+
+    gr->Draw("AP");
+    TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
+    c->Update();
+    cin.get();
+    cin.get();
+    prof->Draw();
+    c->Update();
+    cin.get();
+    cin.get();
+    h2->Draw("colz");
+    c->Update();
+    cin.get();
+    cin.get();
+
+}
+
+
 void NeuralNetwork::drawTargetSectorComparison(){
     vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");     
 
@@ -239,6 +291,7 @@ void NeuralNetwork::drawTargetSectorComparison(){
 void NeuralNetwork::remakeInputDataset(){
     //vector< pair< string, vector<double> > > table = readDBTableFromFile(saveLocation+"info_tables/MDCALL1.dat");
     cout << "starting reading tables" << endl;
+    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL.dat");
     vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");
     cout << "table mdc is read" << endl;
     vector< pair< int, vector<double> > > tableTrig = readClbTableFromFile(saveLocation+"info_tables/trigger_data2.dat");
@@ -337,7 +390,7 @@ void NeuralNetwork::remakeInputDataset(){
 
 
     /// _____   DRAWING
-    dbPars[0] = timeVectToDateNumbers(dbPars[0] );
+    //dbPars[0] = timeVectToDateNumbers(dbPars[0] );
     meanToT[0]= timeVectToDateNumbers(meanToT[0]);
     meanToTAll[0]= timeVectToDateNumbers(meanToTAll[0]);
     meanToTHH[0]= timeVectToDateNumbers(meanToTHH[0]);
@@ -348,7 +401,7 @@ void NeuralNetwork::remakeInputDataset(){
     meanToT[1] = normalizeVectorNN(meanToT[1]);
     meanToTHH[1] = normalizeVectorNN(meanToTHH[1]);
     for (size_t i = 1; i < dbPars.size(); i++)
-        dbPars[i] =  normalizeVectorNN(dbPars[i]);
+        //dbPars[i] =  normalizeVectorNN(dbPars[i]);
     for (size_t i = 1; i < triggPars.size(); i++)
         triggPars[i] =  normalizeVectorNN(triggPars[i]);
 
@@ -371,13 +424,14 @@ void NeuralNetwork::remakeInputDataset(){
     //drawTrainPredictionComparison(meanToT[0], grClb);
 
     /// Check for stability of the calibration depending on selection criteria
-    drawTargetSectorComparison();
+    //drawTargetSectorComparison();
 
     //drawTargetStability(grClbAll,grClb,grClbHH);
 
     /// check for correlations between input and target for ml
     //drawInputTargetCorrelations(grClbAll,triggPars);
     //drawInputTargetCorrelations(grClbAll,dbPars);
+    drawInputTargetCorrelations(arr[0],dbPars);
 
     //auto legend = new TLegend(0.1,0.7,0.48,0.9);
     //legend->AddEntry("grClb","ToT from pp HF","lp");

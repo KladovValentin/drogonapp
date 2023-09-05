@@ -154,8 +154,6 @@ class Conv2dLSTMCell(nn.Module):
         #       hy: of shape (batch_size, hidden_size, height_size, width_size)
         #       cy: of shape (batch_size, hidden_size, height_size, width_size)
 
-        #if self.Wc == 1:
-        #    self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, input.size(2), input.size(3))))
 
         if hx is None:
             hx = Variable(input.new_zeros(input.size(0), self.hidden_size, self.input_size[1], self.input_size[2]))
@@ -213,24 +211,13 @@ class Conv2dLSTM(nn.Module):
                                             self.kernel_size,
                                             self.bias) for _ in range(self.num_layers)])
 
-        #self.rnn_cell_list.append()
-        #for l in range(1, self.num_layers):
-        #    self.rnn_cell_list.append(Conv2dLSTMCell(self.hidden_size,
-        #                                        self.hidden_size,
-        #                                        self.kernel_size,
-        #                                        self.bias))
-
         #self.conv = nn.Conv2d(in_channels=self.hidden_size,
         #                     out_channels=self.output_size,
         #                     kernel_size=self.kernel_size,
         #                     padding=self.padding,
         #                     bias=self.bias)
-        #self.conv1 = nn.Conv2d(in_channels=self.hidden_size, out_channels=1, kernel_size=(6, 1))
-        #self.conv2 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(1, 1))
+
         self.conv1 = nn.Conv2d(in_channels=self.hidden_size, out_channels=1, kernel_size=(1, 1))
-        #self.conv1 = nn.Conv2d(in_channels=self.hidden_size, out_channels=1, kernel_size=(1, 1))
-        #self.conv2 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(6, 1))
-        #self.conv3 = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=(1, 1))
 
         #self.nn_model = nn.ModuleList([nn.Sequential(
         #    nn.Linear(self.input_size, 256, bias=True),
@@ -335,8 +322,6 @@ class Conv2dLSTM(nn.Module):
 
             #print(hidden_l[0].shape)
             newTensor = self.conv1(hidden_l[0])
-            #print (newTensor.shape)
-            #newTensor = self.pool1(newTensor)
             #print (newTensor.shape)
             newTensorI = newTensor.squeeze().unsqueeze(1).unsqueeze(2)
             if (t == 0):

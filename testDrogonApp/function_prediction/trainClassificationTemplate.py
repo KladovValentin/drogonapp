@@ -192,7 +192,7 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         elif (config.modelType == "LSTM"):
             nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
         elif (config.modelType == "ConvLSTM"):
-            nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=4, hidden_size=4, kernel_size=(1,1), num_layers=1, bias=0, output_size=6)
+            nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=6)
 
         loss = nn.MSELoss()
 
