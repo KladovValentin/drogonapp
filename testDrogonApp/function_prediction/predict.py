@@ -28,7 +28,7 @@ def loadModel(config, input_dim, nClasses, path):
     elif (config.modelType == "LSTM"):
         nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
     elif (config.modelType == "ConvLSTM"):
-        nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=4, hidden_size=4, kernel_size=(1,1), num_layers=1, bias=0, output_size=6)
+        nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=6)
     nn_model.type(torch.FloatTensor)
     nn_model.load_state_dict(torch.load(path+"tempModel.pt"))
     return nn_model
@@ -80,10 +80,13 @@ def makePredicionList(config, experiment_path, savePath, path):
     tepoch = tqdm(exp_dataLoader)
     for i_step, (x, y) in enumerate(tepoch):
         tepoch.set_description(f"Epoch {1}")
-        #prediction = (nn_model(x).detach().numpy()[:,-1])
-        prediction = (nn_model(x).detach().numpy())
-        for i in range(1):
-            prediction[:,i] = prediction[:,i]*std[-3] + mean[-3]
+        if (config.modelType != "ConvLSTM"):
+            prediction = (nn_model(x).detach().numpy()[:,-1])*std[-6] + mean[-6]
+        else:
+            prediction = (nn_model(x).detach().numpy())[:,-1,:]
+            for i in range(input_dim[-2]):
+                prediction[:,i] = prediction[:,i]*std[-6+i] + mean[-6+i]
+        print(prediction.shape)
         dat_list.append(pandas.DataFrame(prediction))
 
     fullPredictionList = pandas.concat(list(dat_list),ignore_index=True)
@@ -175,9 +178,9 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     print(dftCorrExp)
 
     localCNames = list(dftCorrExp.columns)
-    for i in range(len(localCNames)-4):
+    for i in range(len(localCNames)-7):
         dftCorrExp.drop(localCNames[i+1],axis=1,inplace=True)
-    for i in range(2):
+    for i in range(5):
         dftCorrExp.drop(localCNames[len(localCNames) -i -1],axis=1,inplace=True)
     dftCorrExp = dftCorrExp.join(pT[list(pT.columns)])
 
@@ -187,9 +190,9 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     pTS.rename(columns={list(pTS.columns)[0] : '0'}, inplace=True)
 
     localCNames = list(dftCorrExpS.columns)
-    for i in range(len(localCNames)-4):
+    for i in range(len(localCNames)-7):
         dftCorrExpS.drop(localCNames[i+1],axis=1,inplace=True)
-    for i in range(2):
+    for i in range(5):
         dftCorrExpS.drop(localCNames[len(localCNames) - i -1],axis=1,inplace=True)
     dftCorrExpS = dftCorrExpS.join(pTS[list(pTS.columns)])
     print(dftCorrExpS)

@@ -85,39 +85,77 @@ float NeuralNetwork::getPrediction(vector<float> inputTensorValues){
 
 void NeuralNetwork::drawTargetStability(TGraphErrors* targetsAll, TGraphErrors* targetsPP, TGraphErrors* targetsHH){
     targetsAll->SetMarkerStyle(23);
-    targetsAll->SetMarkerSize(0.5);
-    targetsAll->SetMarkerColor(2);
-    targetsAll->GetYaxis()->SetRangeUser(-2,2);
+    targetsAll->SetMarkerSize(0.4);
+    //targetsAll->SetMarkerColor(4);
+    targetsAll->GetYaxis()->SetRangeUser(5,6.7);
+    //targetsAll->GetYaxis()->SetRangeUser(0.75,1.25);
     targetsAll->GetXaxis()->SetTimeDisplay(1);
-    targetsAll->GetXaxis()->SetTimeFormat("%d/%m %H");
-    targetsAll->SetTitle(";time;relative change All hadrons");
+    targetsAll->GetXaxis()->SetTimeFormat("%d/%m");
+    targetsAll->SetTitle(";date;-dE/dx [MeV g^{-1} cm^{2}]");
 
-    targetsHH->SetMarkerStyle(24);
-    targetsHH->SetMarkerSize(0.5);
-    targetsHH->SetMarkerColor(3);
-    targetsHH->GetYaxis()->SetRangeUser(-2,2);
+    targetsHH->SetMarkerStyle(23);
+    targetsHH->SetMarkerSize(0.4);
+    //targetsHH->SetMarkerColor(4);
+    targetsHH->GetYaxis()->SetRangeUser(1.6,2.03);
+    //targetsHH->GetYaxis()->SetRangeUser(0.75,1.25);
     targetsHH->GetXaxis()->SetTimeDisplay(1);
-    targetsHH->GetXaxis()->SetTimeFormat("%d/%m %H");
-    targetsHH->SetTitle(";time;relative change H-H");
+    targetsHH->GetXaxis()->SetTimeFormat("%d/%m");
+    targetsHH->SetTitle(";date;-dE/dx [MeV g^{-1} cm^{2}]");
 
-    targetsPP->SetMarkerStyle(22);
-    targetsPP->SetMarkerSize(0.5);
-    targetsPP->SetMarkerColor(4);
-    targetsPP->SetLineColor(4);
-    targetsPP->SetLineWidth(1);
+    targetsPP->SetMarkerStyle(23);
+    targetsPP->SetMarkerSize(0.4);
+    //targetsPP->SetMarkerColor(4);
+    //targetsPP->SetLineColor(4);
+    //targetsPP->SetLineWidth(1);
     targetsPP->SetName("grClb");
-    targetsPP->GetYaxis()->SetRangeUser(-2,2);
+    targetsPP->GetYaxis()->SetRangeUser(12.5,18.6);
+    //targetsPP->GetYaxis()->SetRangeUser(0.75,1.25);
     targetsPP->GetXaxis()->SetTimeDisplay(1);
-    targetsPP->GetXaxis()->SetTimeFormat("%d/%m %H");
-    targetsPP->SetTitle(";time;relative change H-F");
+    targetsPP->GetXaxis()->SetTimeFormat("%d/%m");
+    targetsPP->SetTitle(";date;-dE/dx [MeV g^{-1} cm^{2}]");
+
+
+        targetsAll->GetXaxis()->SetLabelSize(0.05);
+        targetsAll->GetYaxis()->SetLabelSize(0.05);
+        targetsAll->GetXaxis()->SetTitleSize(0.07);
+        targetsAll->GetYaxis()->SetTitleSize(0.07);
+        targetsAll->GetXaxis()->SetTitleOffset(0.65);
+        targetsAll->GetYaxis()->SetTitleOffset(0.5);
+
+        targetsHH->GetXaxis()->SetLabelSize(0.05);
+        targetsHH->GetYaxis()->SetLabelSize(0.05);
+        targetsHH->GetXaxis()->SetTitleSize(0.07);
+        targetsHH->GetYaxis()->SetTitleSize(0.07);
+        targetsHH->GetXaxis()->SetTitleOffset(0.65);
+        targetsHH->GetYaxis()->SetTitleOffset(0.5);
+
+        targetsPP->GetXaxis()->SetLabelSize(0.05);
+        targetsPP->GetYaxis()->SetLabelSize(0.05);
+        targetsPP->GetXaxis()->SetTitleSize(0.07);
+        targetsPP->GetYaxis()->SetTitleSize(0.07);
+        targetsPP->GetXaxis()->SetTitleOffset(0.65);
+        targetsPP->GetYaxis()->SetTitleOffset(0.5);
+
 
     TCanvas* canvas = new TCanvas("canvas", "Canvas Title", 1220, 980);
     canvas->Divide(1, 3); // Divide canvas into 3 rows and 1 column
     canvas->cd(1);
+    TPad* pad1 = new TPad("pad1", "pad1", 0.0, 0.0, 1.0, 1.0);
+        pad1->SetBottomMargin(0.15);
+        pad1->Draw();
+        pad1->cd();
     targetsAll->Draw("AP");
     canvas->cd(2);
+    TPad* pad2 = new TPad("pad2", "pad2", 0.0, 0.0, 1.0, 1.0);
+        pad2->SetBottomMargin(0.15);
+        pad2->Draw();
+        pad2->cd();
     targetsPP->Draw("AP");
     canvas->cd(3);
+    TPad* pad3 = new TPad("pad3", "pad3", 0.0, 0.0, 1.0, 1.0);
+        pad3->SetBottomMargin(0.15);
+        pad3->Draw();
+        pad3->cd();
     targetsHH->Draw("AP");
     canvas->Update();
     // Keep the application running until the user closes the canvas
@@ -136,20 +174,32 @@ void NeuralNetwork::drawInputTargetCorrelations(TGraphErrors* target, vector< ve
     target->SetName("grClb");
     target->GetYaxis()->SetRangeUser(-2,2);
     target->GetXaxis()->SetTimeDisplay(1);
-    target->GetXaxis()->SetTimeFormat("%d/%m %H");
-    target->SetTitle(";time;relative change H-F");
+    target->GetXaxis()->SetTimeFormat("%d/%m");
+    target->GetXaxis()->SetLabelSize(0.03);
+    target->SetTitle(";date;normalized fluctuations");
+
+    TCanvas* canvas = new TCanvas("canvas", "Canvas Title", 1520, 950);
 
     target->Draw("AP");
+    target->GetXaxis()->SetNdivisions(19);
 
     for (size_t i = 1; i < inputs.size(); i++){
         target->Draw("AP");
-        TGraph* grInput  = new TGraph( inputs[0].size(), &inputs[0][0], &inputs[i][0]);
+        cout << inputs[0][0] << endl;
+        TGraph* grInput  = new TGraph( 11000, &inputs[0][0], &inputs[i][0]);
         grInput->GetYaxis()->SetRangeUser(-5,5);
         grInput->SetMarkerStyle(22);grInput->SetMarkerSize(0.5);
         grInput->SetMarkerColor(2);grInput->SetLineColor(2);
+        grInput->SetName("grInput");
+        target->SetName("target");
         grInput->Draw("Psame");
-        TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
-        c->Update();
+        //TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
+
+        auto legend = new TLegend(0.1,0.75,0.4,0.9);
+        legend->AddEntry("grInput","Atmospheric pressure","lp");
+        legend->AddEntry("target","average dE/dx","lp");
+        legend->Draw();
+        canvas->Update();
         cin.get();
     }
 }
@@ -157,21 +207,23 @@ void NeuralNetwork::drawInputTargetCorrelations(TGraphErrors* target, vector< ve
 void NeuralNetwork::drawInputTargetCorrelations(vector< vector<double> > targets, vector< vector<double> > inputs){
 
     vector<double> input, target, inputErr, targetErr;
-    TProfile* prof = new TProfile("prof","profile",200,990,1040);
-    TH2* h2 = new TH2F("h2","h2",100,990,1040,100,4,8);
+    //TProfile* prof = new TProfile("prof","profile",200,990,1040);
+    //TH2* h2 = new TH2F("h2","ionization losses vs atmospheric pressure sector 1;pressure [Pa];average ionization losses [MeV*cm^{2}/g]",100,990,1040,100,4,8);
+    TProfile* prof = new TProfile("prof","profile",200,30,50);
+    TH2* h2 = new TH2F("h2","ionization losses vs overpressure sector 4;overpressure [Pa];average ionization losses [MeV*cm^{2}/g]",100,30,50,100,4,8);
     // fill arrays 
     for (size_t i = 0; i<inputs[0].size(); i++){
         double run = inputs[0][i];
         //cout << run << "    " << targets[0][15] << endl;
         auto ps = std::find(targets[0].begin(), targets[0].end(), run);
-        if (ps != targets[0].end()){
+        if (ps != targets[22].end()){
             int indexs = std::distance(targets[0].begin(), ps);
             input.push_back(inputs[1][i]);
             inputErr.push_back(0);
             target.push_back(targets[1][indexs]);
             targetErr.push_back(targets[3][indexs]);
-            prof->Fill(inputs[1][i],targets[1][indexs]);
-            h2->Fill(inputs[1][i],targets[1][indexs]);
+            prof->Fill(inputs[22][i],targets[1][indexs]);
+            h2->Fill(inputs[22][i],targets[1][indexs]);
             //cout << input[input.size()-1] << "  " << inputErr[input.size()-1] << "  " << target[input.size()-1] << "  " << targetErr[input.size()-1] << "  " << endl;
         }
     }
@@ -188,19 +240,17 @@ void NeuralNetwork::drawInputTargetCorrelations(vector< vector<double> > targets
     gr->SetName("gr");
     gr->GetYaxis()->SetRangeUser(4,8);
     prof->GetYaxis()->SetRangeUser(4,8);
+    h2->SetStats(0);
 
     gr->Draw("AP");
-    TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
+    TCanvas* c = new TCanvas("canvas", "Canvas Title", 950, 950);
     c->Update();
-    cin.get();
     cin.get();
     prof->Draw();
     c->Update();
     cin.get();
-    cin.get();
     h2->Draw("colz");
     c->Update();
-    cin.get();
     cin.get();
 
 }
@@ -354,70 +404,78 @@ void NeuralNetwork::remakeInputDataset(){
     }
 
     ///_____ Writing to a file
-    ofstream ofNN;
-    ofNN.open(saveLocation+"nn_input/outNNTest1.dat");
-    for (size_t i = 0; i<tableClbAll.size(); i++){
-        int run = tableClbAll[i].first;
-        double yTarget = meanToTAll[1][i];
-        auto p = std::find(dbPars[0].begin(), dbPars[0].end(), run);
-        auto pt = std::find(triggPars[0].begin(), triggPars[0].end(), run);
-        auto ps = std::find(arr[0][0].begin(), arr[0][0].end(), run);
-        //cout << std::distance(dbPars[0].begin(), p) << endl;
-        //cout << std::distance(triggPars[0].begin(), pt) << endl;
-        if (p != dbPars[0].end() && pt != triggPars[0].end() && ps != arr[0][0].end()){
-            //ofNN << dateRunF::runToDateNumber(run);
-            ofNN << (run);
-            int index = std::distance(dbPars[0].begin(), p);
-            for (size_t j = 0; j<dbPars.size()-1; j++){
-                if (std::find(additionalFilter.begin(), additionalFilter.end(), j) == additionalFilter.end())
-                    ofNN << " " << dbPars[j+1][index];
+    if (false){
+        ofstream ofNN;
+        ofNN.open(saveLocation+"nn_input/outNNTest1.dat");
+        for (size_t i = 0; i<tableClbAll.size(); i++){
+            int run = tableClbAll[i].first;
+            double yTarget = meanToTAll[1][i];
+            auto p = std::find(dbPars[0].begin(), dbPars[0].end(), run);
+            auto pt = std::find(triggPars[0].begin(), triggPars[0].end(), run);
+            auto ps = std::find(arr[0][0].begin(), arr[0][0].end(), run);
+            //cout << std::distance(dbPars[0].begin(), p) << endl;
+            //cout << std::distance(triggPars[0].begin(), pt) << endl;
+            if (p != dbPars[0].end() && pt != triggPars[0].end() && ps != arr[0][0].end()){
+                //ofNN << dateRunF::runToDateNumber(run);
+                ofNN << (run);
+                int index = std::distance(dbPars[0].begin(), p);
+                for (size_t j = 0; j<dbPars.size()-1; j++){
+                    if (std::find(additionalFilter.begin(), additionalFilter.end(), j) == additionalFilter.end())
+                        ofNN << " " << dbPars[j+1][index];
+                }
+                int indext = std::distance(triggPars[0].begin(), pt);
+                for (size_t j = 0; j<triggPars.size()-1; j++){
+                    //ofNN << " " << triggPars[j+1][indext];
+                }
+                int indexs = std::distance(arr[0][0].begin(), ps);
+                for (size_t s = 0; s < 6; s++){
+                    if ((int)arr[s][0][indexs] != run)
+                        cout << "run is not the same    "  << (int)arr[s][0][indexs] << " " << run << endl;
+                    ofNN << " " << arr[s][1][indexs];
+                }
+                ofNN << endl;
+                //ofNN << " " << yTarget << endl;
             }
-            int indext = std::distance(triggPars[0].begin(), pt);
-            for (size_t j = 0; j<triggPars.size()-1; j++){
-                //ofNN << " " << triggPars[j+1][indext];
-            }
-            int indexs = std::distance(arr[0][0].begin(), ps);
-            for (size_t s = 0; s < 6; s++){
-                if ((int)arr[s][0][indexs] != run)
-                    cout << "run is not the same    "  << (int)arr[s][0][indexs] << " " << run << endl;
-                ofNN << " " << arr[s][1][indexs];
-            }
-            ofNN << endl;
-            //ofNN << " " << yTarget << endl;
         }
+        ofNN.close();
     }
-    ofNN.close();
 
 
     /// _____   DRAWING
-    //dbPars[0] = timeVectToDateNumbers(dbPars[0] );
+    dbPars[0] = timeVectToDateNumbers(dbPars[0] );
     meanToT[0]= timeVectToDateNumbers(meanToT[0]);
     meanToTAll[0]= timeVectToDateNumbers(meanToTAll[0]);
     meanToTHH[0]= timeVectToDateNumbers(meanToTHH[0]);
     triggPars[0]= timeVectToDateNumbers(triggPars[0]);
 
     // scaling
-    meanToTAll[1] = normalizeVectorNN(meanToTAll[1]);
-    meanToT[1] = normalizeVectorNN(meanToT[1]);
-    meanToTHH[1] = normalizeVectorNN(meanToTHH[1]);
+    //meanToTAll[1] = normalizeVectorNN(meanToTAll[1]);
+    //meanToT[1] = normalizeVectorNN(meanToT[1]);
+    //meanToTHH[1] = normalizeVectorNN(meanToTHH[1]);
     for (size_t i = 1; i < dbPars.size(); i++)
-        //dbPars[i] =  normalizeVectorNN(dbPars[i]);
+        dbPars[i] =  normalizeVectorNN(dbPars[i]);
     for (size_t i = 1; i < triggPars.size(); i++)
         triggPars[i] =  normalizeVectorNN(triggPars[i]);
 
-    //for (size_t i = 0; i < meanToTAll[0].size(); i++){
-    //    meanToT[1][i] = meanToTAll[1][i] !=0 ? meanToT[1][i]/meanToTAll[1][i]-1 : 0. ;
-    //    meanToTHH[1][i] = meanToTAll[1][i] !=0 ? meanToTHH[1][i]/meanToTAll[1][i]-1 : 0. ;
-    //}
+    //double meanAll = normalizeVector(meanToTAll[1]);
+    //double mean0 = normalizeVector(meanToT[1]);
+    //double meanHH = normalizeVector(meanToTHH[1]);
 
+
+    for (size_t i = 0; i< dbPars[0].size(); i++){
+        dbPars[1][i] = dbPars[1][i]*(-0.7)-0.1;
+    }
 
 
     TDatime da(2022,2,3,15,58,00);
     gStyle->SetTimeOffset(da.Convert());
 
-    TGraphErrors* grClb  = new TGraphErrors( 8000, &meanToT[0][0], &meanToT[1][0], &meanToT[2][0], &meanToT[2][0]);
-    TGraphErrors* grClbAll  = new TGraphErrors( 8000, &meanToT[0][0], &meanToTAll[1][0], &meanToT[2][0], &meanToT[2][0]);
-    TGraphErrors* grClbHH  = new TGraphErrors( 8000, &meanToT[0][0], &meanToTHH[1][0], &meanToT[2][0], &meanToT[2][0]);
+    cout << meanToTAll[0][0] << endl;
+    cout << meanToTAll[0][100] << endl << endl;
+
+    TGraphErrors* grClb  = new TGraphErrors( 12000, &meanToT[0][0], &meanToT[1][0], &meanToT[2][0], &meanToT[2][0]);
+    TGraphErrors* grClbAll  = new TGraphErrors( 12000, &meanToTAll[0][0], &meanToTAll[1][0], &meanToT[2][0], &meanToT[2][0]);
+    TGraphErrors* grClbHH  = new TGraphErrors( 12000, &meanToT[0][0], &meanToTHH[1][0], &meanToT[2][0], &meanToT[2][0]);
 
     //grClb->Draw("AP");
 
@@ -426,12 +484,12 @@ void NeuralNetwork::remakeInputDataset(){
     /// Check for stability of the calibration depending on selection criteria
     //drawTargetSectorComparison();
 
-    //drawTargetStability(grClbAll,grClb,grClbHH);
+    drawTargetStability(grClbAll,grClb,grClbHH);
 
     /// check for correlations between input and target for ml
     //drawInputTargetCorrelations(grClbAll,triggPars);
     //drawInputTargetCorrelations(grClbAll,dbPars);
-    drawInputTargetCorrelations(arr[0],dbPars);
+    //drawInputTargetCorrelations(arr[3],dbPars);
 
     //auto legend = new TLegend(0.1,0.7,0.48,0.9);
     //legend->AddEntry("grClb","ToT from pp HF","lp");

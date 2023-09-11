@@ -41,26 +41,26 @@ def load_dataset(config, dataTable):
                 for j in range(sentenceLength-i-1):
                     xii = []
                     for s in range(7):
-                        xii.append(dfn[0,6*(s)+3])
+                        xii.append(dfn[0,6*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[0,:-1])
-                    yi.append(dfn[0,-3])
+                    yi.append(dfn[0,-6])
                 for j in range(i+1):
                     xii = []
                     for s in range(7):
-                        xii.append(dfn[j,6*(s)+3])
+                        xii.append(dfn[j,6*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[j,:-1])
-                    yi.append(dfn[j,-3])
+                    yi.append(dfn[j,-6])
                     
             else:
                 for j in range(sentenceLength):
                     xii = []
                     for s in range(7):
-                        xii.append(dfn[i-sentenceLength+1+j,6*(s)+3])
+                        xii.append(dfn[i-sentenceLength+1+j,6*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[i-sentenceLength+1+j,:-1])
-                    yi.append(dfn[i-sentenceLength+1+j,-3])
+                    yi.append(dfn[i-sentenceLength+1+j,-6])
             x.append(xi)
             y.append(yi)
         x = np.array(x).astype(np.float32)
@@ -75,24 +75,24 @@ def load_dataset(config, dataTable):
             if i<(sentenceLength-1):
                 for j in range(sentenceLength-i-1):
                     xii = []
-                    yii = dfn[0,-3:-2]
+                    yii = dfn[0,-6:-3]
                     for s in range(7):
-                        xii.append(dfn[0,6*(s)+3:6*(s)+4])
+                        xii.append(dfn[0,6*(s):6*(s+1)-3])
                     xi.append(xii)
                     yi.append(yii)
                 for j in range(i+1):
                     xii = []
-                    yii = dfn[j,-3:-2]
+                    yii = dfn[j,-6:-3]
                     for s in range(7):
-                        xii.append(dfn[j,6*(s)+3:6*(s)+4])
+                        xii.append(dfn[j,6*(s):6*(s+1)-3])
                     xi.append(xii)
                     yi.append(yii)
             else:
                 for j in range(sentenceLength):
                     xii = []
-                    yii = dfn[i-sentenceLength+1+j,-3:-2]
+                    yii = dfn[i-sentenceLength+1+j,-6:-3]
                     for s in range(7):
-                        xii.append(dfn[i-sentenceLength+1+j,6*(s)+3:6*(s)+4])
+                        xii.append(dfn[i-sentenceLength+1+j,6*(s):6*(s+1)-3])
                     xi.append(xii)
                     yi.append(yii)
             x.append(xi)

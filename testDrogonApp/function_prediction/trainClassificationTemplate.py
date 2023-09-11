@@ -199,11 +199,11 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         #optimizer = optim.SGD(nn_model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.05)
         optimizer = optim.Adam(nn_model.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=weight_decay)
 
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.7)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.8)
         #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
 
         print("prepared to train nn")
-        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, 50, valid_loader, scheduler = scheduler)
+        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, 100, valid_loader, scheduler = scheduler)
 
         print("trained nn, valid acc = " + str(loc_acc))
 
@@ -217,7 +217,7 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         elif (config.modelType == "LSTM"):
             modelRandInput = torch.randn(1, 15, input_dim[-1])
         elif (config.modelType == "ConvLSTM"):
-            modelRandInput = torch.randn(1, 15, input_dim[-3], 1, 1)
+            modelRandInput = torch.randn(1, 15, input_dim[-3], input_dim[-2], input_dim[-1])
         torch.onnx.export(nn_model,                                # model being run
                   modelRandInput,    # model input (or a tuple for multiple inputs)
                   mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)

@@ -31,6 +31,57 @@ vector<string> tokenize(string str, const char *delim){
     return result;
 }
 
+vector<double> runningMeanVector(vector<double> vect, int avRange){
+
+    double maxdiff = *max_element(vect.begin(), vect.end()) - *min_element(vect.begin(), vect.end());
+    TH1 *hStep = new TH1F("hStep",";diff;counts",300,-maxdiff/5,maxdiff/5);
+    for (size_t i = 0; i < vect.size()-1; i++){
+        if (vect[i] > 0 && vect[i+1] > 0){
+            hStep->Fill(vect[i+1]-vect[i]);
+        }
+    }
+    double stepCut = 1.5*hStep->GetRMS();
+    double stepMean = hStep->GetMean();
+    
+    cout << "std and mean   " << hStep->GetRMS() << "    " << hStep->GetMean() << endl;
+    //hStep->Draw();
+    //TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
+    //c->Update();
+    //cin.get();cin.get();
+
+    vector<bool> goodForAveraging;
+    goodForAveraging.push_back(false);
+    for (size_t i = 0; i < vect.size()-1; i++){
+        if (fabs(vect[i+1]-vect[i] - stepMean) > stepCut){
+            goodForAveraging.push_back(false);            
+        }
+        else {
+            goodForAveraging.push_back(true);
+        }
+    }
+    vector<double> result;
+    for (size_t i = 0; i < vect.size(); i++){
+        if (!goodForAveraging[i]){
+            result.push_back(vect[i]);
+            continue;
+        }
+
+        double mean2 = 0;
+        int count1 = 0;
+        for (size_t j = 0; j < avRange+1; j++){
+            if ((i+j-avRange/2<0) || (i+j-avRange/2>=vect.size()) || (fabs(vect[i+j-avRange/2]-vect[i] - stepMean) > stepCut))
+                continue;
+            count1 +=1;
+            mean2+=vect[i+j-avRange/2];
+        }
+        mean2 = mean2/count1;
+        if (count1 == 0)
+            mean2 = vect[i];
+        result.push_back(mean2);
+    }
+
+    return result;
+}
 
 double dateToNumber(string date){
     vector<string> tokens = tokenize(date, "[-]");
@@ -85,9 +136,10 @@ void remakeMDCAll1(){
             pars.push_back(par);
         }
         fo << run << "\t";
+	int indexLinks[7] = {0,1,2,5,3,4,6};
         for (size_t i = 0; i < 7; i++){
             for (size_t j = 0; j < 6; j++){
-                fo << pars[7*j+i] << "\t";
+                fo << pars[7*j+indexLinks[i]] << "\t";
             }
         }
         fo << endl;
@@ -187,67 +239,106 @@ void drawTargetPredictionComparison(){
     const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
     /// Reading target values and averaging -> map
     ifstream fin2;
-	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCAllNew.dat").c_str());
+	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecAllNew.dat").c_str());
     std::map<int, pair<double,double> > targets;
     vector<int> runsTargets;
     vector<double> valuesTargets,runsTargetsErr,valuesTargetsErr;
     while (!fin2.eof()){
-        int run;
+        int run, sector;
         double target, targetErr;
-        fin2 >> run >> target >> targetErr;
-        targets[run] = make_pair(target,targetErr);
-        runsTargets.push_back(run);
-        valuesTargets.push_back(target);
-        runsTargetsErr.push_back(0);
-        valuesTargetsErr.push_back(targetErr);
+        fin2 >> run >> sector >> target >> targetErr;
+        if (sector == 0){
+            //cout << run << endl;
+            targets[run] = make_pair(target,targetErr);
+            runsTargets.push_back(run);
+            valuesTargets.push_back(target);
+            runsTargetsErr.push_back(0);
+            valuesTargetsErr.push_back(targetErr);
+        }
     }
     fin2.close();
 
     TGraphErrors* gr2 = new TGraphErrors();
     gr2->SetMarkerStyle(21);
-    gr2->SetMarkerSize(0.5);
+    gr2->SetMarkerSize(0.4);
     gr2->SetMarkerColor(4);
     gr2->SetLineColor(4);
-    gr2->SetLineWidth(4);
+    gr2->SetLineWidth(1);
 
     //valuesTargets = runningMeanVector(valuesTargets, 20);
     for (size_t i = 0; i < runsTargets.size(); i++){
         //targets[runsTargets[i]] = valuesTargets[i];
         int n = gr2->GetN();
-        gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),targets[runsTargets[i]].first);
+        //gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),targets[runsTargets[i]].first);
+        gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),valuesTargets[i]);
         gr2->SetPointError(n, runsTargetsErr[i], valuesTargetsErr[i]);
     }
     cout << gr2->GetN() << endl;
     cout << "finished with target " << endl;
 
     ifstream fin1;
-	fin1.open((saveLocation+ "function_prediction/predicted.txt").c_str());
+    fin1.open((saveLocation+ "function_prediction/predictedSec1tSepLSTM.txt").c_str());
+	//fin1.open((saveLocation+ "function_prediction/predicted.txt").c_str());
     vector<double> runsPredicted, runsPredictedRuns;
     vector<double> valuesPredicted;
     while (!fin1.eof()){
         double run, prediction;
-        fin1 >> run >> prediction;
+        double p2,p3;
+        fin1 >> run >> prediction >> p2 >> p3;
         runsPredictedRuns.push_back(run);
         runsPredicted.push_back((double)runToDateNumber(run));
         valuesPredicted.push_back(prediction);
     }
     fin1.close();
 
-    fin2.open((saveLocation+ "function_prediction/predicted1.txt").c_str());
+    fin2.open((saveLocation+ "function_prediction/predicted1Sec1tSepLSTM.txt").c_str());
+    //fin2.open((saveLocation+ "function_prediction/predicted1.txt").c_str());
     vector<double> runsPredictedP, runsPredictedRunsP;
     vector<double> valuesPredictedP;
     while (!fin2.eof()){
         double run, prediction;
-        fin2 >> run >> prediction;
+        double p2,p3;
+        fin2 >> run >> prediction >> p2 >> p3;
         runsPredictedRunsP.push_back(run);
         runsPredictedP.push_back((double)runToDateNumber(run));
         valuesPredictedP.push_back(prediction);
     }
     fin2.close();
 
+    //fin1.open((saveLocation+ "function_prediction/predictedSec1tSepLSTM.txt").c_str());
+    fin1.open((saveLocation+ "function_prediction/predicted.txt").c_str());
+    vector<double> runsPredictedL, runsPredictedRunsL;
+    vector<double> valuesPredictedL;
+    while (!fin1.eof()){
+        double run, prediction;
+        fin1 >> run >> prediction;
+        runsPredictedRunsL.push_back(run);
+        runsPredictedL.push_back((double)runToDateNumber(run));
+        valuesPredictedL.push_back(prediction);
+    }
+    fin1.close();
+
+    //fin2.open((saveLocation+ "function_prediction/predicted1Sec1tSepLSTM.txt").c_str());
+    fin2.open((saveLocation+ "function_prediction/predicted1.txt").c_str());
+    vector<double> runsPredictedPL, runsPredictedRunsPL;
+    vector<double> valuesPredictedPL;
+    while (!fin2.eof()){
+        double run, prediction;
+        fin2 >> run >> prediction;
+        runsPredictedRunsPL.push_back(run);
+        runsPredictedPL.push_back((double)runToDateNumber(run));
+        valuesPredictedPL.push_back(prediction);
+    }
+    fin2.close();
+
+    vector<double> commCopy = runningMeanVector(valuesPredicted, 20);
+    vector<double> singCopy = runningMeanVector(valuesPredictedL, 20);
+
+
     /// _____ making graphErrors for prediction-target
     vector<double> runsPredictedTarget, diffPredictedTarget, runsPredictedTargetErr, diffPredictedTargetErr;
     for (size_t i = 0; i < runsPredicted.size(); i++){
+        //cout << (int)runsPredictedRuns[i] << endl;
         if (targets.find((int)runsPredictedRuns[i]) == targets.end())
             continue;
         if (targets[runsPredictedRuns[i]].second == 0)
@@ -268,27 +359,42 @@ void drawTargetPredictionComparison(){
         diffPredictedTargetP.push_back( (valuesPredictedP[i] - targets[runsPredictedRunsP[i]].first)/targets[runsPredictedRunsP[i]].second );
         diffPredictedTargetErrP.push_back(0);
     }
+
     TGraphErrors* grPT = new TGraphErrors(runsPredictedTarget.size(),&runsPredictedTarget[0], &diffPredictedTarget[0], &runsPredictedTargetErr[0], &diffPredictedTargetErr[0]);
     TGraphErrors* grPTP = new TGraphErrors(runsPredictedTargetP.size(),&runsPredictedTargetP[0], &diffPredictedTargetP[0], &runsPredictedTargetErrP[0], &diffPredictedTargetErrP[0]);
     grPT->SetMarkerStyle(22);    grPT->SetMarkerSize(1.0);    grPT->SetLineColor(3);    grPT->SetMarkerColor(3);    grPT->SetLineWidth(4);
     grPTP->SetMarkerStyle(22);   grPTP->SetMarkerSize(1.0);   grPTP->SetLineColor(1);   grPTP->SetMarkerColor(1);   grPTP->SetLineWidth(4);
 
 
-
     TGraph* gr1 = new TGraph(runsPredicted.size(),&runsPredicted[0], &valuesPredicted[0]);
     TGraph* grP = new TGraph(runsPredictedP.size(),&runsPredictedP[0], &valuesPredictedP[0]);
+    TGraph* gr1L = new TGraph(runsPredictedL.size(),&runsPredictedL[0], &valuesPredictedL[0]);
+    TGraph* grPL = new TGraph(runsPredictedPL.size(),&runsPredictedPL[0], &valuesPredictedPL[0]);
+
 
     gr1->SetMarkerStyle(22);
     gr1->SetMarkerSize(1.0);
-    gr1->SetLineColor(3);
-    gr1->SetMarkerColor(3);
+    gr1->SetLineColor(2);
+    gr1->SetMarkerColor(2);
     gr1->SetLineWidth(4);
 
     grP->SetMarkerStyle(22);
     grP->SetMarkerSize(1.0);
-    grP->SetLineColor(1);
-    grP->SetMarkerColor(1);
+    grP->SetLineColor(2);
+    grP->SetMarkerColor(2);
     grP->SetLineWidth(4);
+
+    gr1L->SetMarkerStyle(22);
+    gr1L->SetMarkerSize(1.0);
+    gr1L->SetLineColor(3);
+    gr1L->SetMarkerColor(3);
+    gr1L->SetLineWidth(4);
+
+    grPL->SetMarkerStyle(22);
+    grPL->SetMarkerSize(1.0);
+    grPL->SetLineColor(1);
+    grPL->SetMarkerColor(1);
+    grPL->SetLineWidth(4);
 
     TDatime da(2022,2,3,15,58,00);
     gStyle->SetTimeOffset(da.Convert());
@@ -300,6 +406,12 @@ void drawTargetPredictionComparison(){
 
     grP->GetXaxis()->SetTimeDisplay(1);
     grP->GetXaxis()->SetTimeFormat("%d/%m");
+
+    gr1L->GetXaxis()->SetTimeDisplay(1);
+    gr1L->GetXaxis()->SetTimeFormat("%d/%m");
+
+    grPL->GetXaxis()->SetTimeDisplay(1);
+    grPL->GetXaxis()->SetTimeFormat("%d/%m");
 
     grPT->GetXaxis()->SetLimits(grPT->GetX()[0]-100000, grPT->GetX()[runsPredictedTarget.size()-1]*1.3);
     grPT->GetYaxis()->SetRangeUser(-6,6);
@@ -325,124 +437,16 @@ void drawTargetPredictionComparison(){
     legend->AddEntry(grPT, "train dataset", "l");
     legend->AddEntry(grPTP, "test dataset", "l");
 
-    gr2->GetYaxis()->SetRangeUser(-5,5);
+    //gr2->GetYaxis()->SetRangeUser(-5,5);
     //gr2->Draw("AP");
     //gr1->Draw("Psame");
     //grP->Draw("Psame");
+    //gr1L->Draw("Psame");
+    //grPL->Draw("Psame");
     grPT->Draw("AP");
     grPTP->Draw("Psame");
     legend->Draw();
 
     TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
     c->Update();
-}
-
-
-void go(const char* filename = "mergedHistsExp34-48.root"){
-    TFile* file = new TFile(filename, "READ");
-    TH1F* hist = (TH1F*)file->Get("hMKNKP");
-
-    TF1* f1 = new TF1("f1", "[0]*exp(-0.5*((x-[1])/[2])**2)+[3]*exp(-0.5*((x-[4])/[5])**2) + [7]*(x-[6]) + [8]*(x-[6])*(x-[6])",980,1400);
-    f1->SetParameters(30, 1020, 10, 15, 1250, 50, 1000, -1, 1);
-    f1->SetParLimits(0,10,100);
-    f1->SetParLimits(1,1000,1050);
-    f1->SetParLimits(2,1,10);
-    f1->SetParLimits(3,1,50);
-    f1->SetParLimits(4,1100,1300);
-    f1->SetParLimits(5,30,150);
-    hist->Fit("f1","","",980,1400);
-    hist->Draw();
-    f1->Draw("same");
-    cout << (f1->GetParameter(0) * fabs(f1->GetParameter(2))) * (sqrt(3.14159 * 2.)) << endl;
-}
-
-
-void makeMixingMatrix(){
-    TFile *f1 = TFile::Open("mergedHistsSim005_3.root");
-    TH2I *h2 = (TH2I*)f1->Get("hMixingNN");
-    TH1F *h1 = (TH1F*)f1->Get("hNNEvtCorrupt");
-    int sums[6];
-    for (size_t i = 0; i < 6; i++){
-        sums[i] = 0;
-        for (size_t j = 0; j < 6; j++){
-            sums[i] += h2->GetBinContent(i+1,j+1);
-        }
-    }
-    for (size_t j = 6; j >= 1; j--){
-        for (size_t i = 0; i < 6; i++){
-            if (sums[i]==0)
-                cout << "0  ";
-            else{
-                cout << h2->GetBinContent(i+1,j)/sums[i] << " ";
-            }
-        }
-        cout << endl;
-    }
-    h2->Draw();
-}
-
-
-double interpolateChiSquarePDF(double* x, double* p) {
-    int lowerDof = static_cast<int>(p[1]);
-    int upperDof = lowerDof + 1;
-
-    int lowerDof1 = static_cast<int>(p[3]);
-    int upperDof1 = lowerDof + 1;
-
-    double lowerPDF = TMath::Prob(*x,lowerDof);//TMath::GammaDist(*x, lowerDof / 2.0, 0.5);
-    double upperPDF = TMath::Prob(*x,upperDof);//TMath::GammaDist(*x, upperDof / 2.0, 0.5);
-
-    double lowerPDF1 = TMath::Prob(*x,lowerDof1);//TMath::GammaDist(*x, lowerDof1 / 2.0, 0.5);
-    double upperPDF1 = TMath::Prob(*x,upperDof1);//TMath::GammaDist(*x, upperDof1 / 2.0, 0.5);
-
-    double chi0 = p[0] * (lowerPDF + (p[1] - lowerDof) * (upperPDF - lowerPDF));
-    double chi1 = p[2] * (lowerPDF1 + (p[3] - lowerDof1) * (upperPDF1 - lowerPDF1));
-
-    // Linear interpolation
-    return chi0 + chi1 + p[4] + (*x)*p[5];
-}
-
-void fit4cChi2(){
-    TFile *file0 = TFile::Open("mergedHistsExp34-48_N.root");
-    TH1F *h1 = (TH1F*)file0->Get("h4cChi2");
-    vector<double> x, y, xErr, yErr;
-    for (size_t i = 1; i < 101; i++){
-        x.push_back(h1->GetBinCenter(i));
-        y.push_back((float)(h1->GetBinContent(i))/pow(10.,(float)i/20.-1.));
-        //y.push_back(h1->GetBinContent(i));
-        xErr.push_back(h1->GetBinWidth(i)/2);
-        yErr.push_back(h1->GetBinError(i)/pow(10.,(float)i/20.-1.));
-        //yErr.push_back(h1->GetBinError(i));
-        h1->SetBinContent(i,(float)(h1->GetBinContent(i))/pow(10.,(float)i/20.-1.));
-    }
-    TGraphErrors* gr = new TGraphErrors(x.size(),&x[0],&y[0],&xErr[0],&yErr[0]);
-    gr->SetTitle("#chi^{2} fit probability distribution");
-
-    TF1* f1 = new TF1("f1", interpolateChiSquarePDF,0.1,10, 6);
-    TF1* f2 = new TF1("f2", "[0]*x + [1]",0.1,200);
-    TF1* f3 = new TF1("f3", "[0]*x + [1]",0.1,200);
-    f1->SetParameters(200, 4, 600, 3000, 1, 10);
-    f1->SetParLimits(0,10,1000);
-    f1->SetParLimits(1,0,20);
-    //f1->SetParLimits(2,100,100000);
-    //f1->SetParLimits(3,500,10000);
-    f1->FixParameter(2,0);
-    f1->SetParLimits(4,0,100);
-    f1->SetParLimits(5,0,50);
-
-    gStyle->SetOptLogx();
-    //gStyle->SetOptLogy();
-
-    gr->Fit("f2","","",30,200);
-    gr->Draw();
-    TLine* l = new TLine(20,0,20,700);
-    l->Draw("same");
-    //f2->SetParameters(0.2562,64.3231);
-    f2->Draw("same");
-
-    //f1->Draw("same");
-    //f2->SetParameters(f1->GetParameter(2), f1->GetParameter(3));
-    //f2->Draw("same");
-    //file0->Close();
-    cout << "S/B approximate ratio  " << (h1->Integral(1,46) - (f2->GetParameter(0)*20./2.+f2->GetParameter(1))*20.)/((f2->GetParameter(0)*20./2.+f2->GetParameter(1))*20.) << endl;
 }
