@@ -57,6 +57,7 @@ vector<double> vectorFunctions::runningMeanVector(vector<double> vect, int avRan
             mean2 = vect[i];
         result.push_back(mean2);
     }
+    hStep->Delete();
 
 
     /*vector<double> result;
@@ -354,6 +355,25 @@ vector< vector<double> > preTrainFunctions::clbTableToVectorsTarget(vector< pair
         arr[1].push_back(intable[i].second[0]);
         arr[2].push_back(0);
         arr[3].push_back(intable[i].second[1]);
+    }
+    return arr;
+}
+
+std::map< int, vector<double> > preTrainFunctions::clbTableToVectorsTarget(vector< pair< int, vector<double> > > intable, vector<int> shape){
+    //vector< vector<double> > arr = new vector<double>[4];
+    std::map< int, vector<double> > arr;
+    int shapeSize = shape.size();
+    vector<int> singularVector{1};
+    if (shape == singularVector)
+        shapeSize = 0;
+    int outShapeLength = 1; for (int x: shape){ outShapeLength*=x; }
+
+    for (size_t i = 0; i < intable.size(); i=i+outShapeLength){
+        vector<double> meanValues;
+        for (size_t j = 0; j < outShapeLength; j++){
+            meanValues.push_back(intable[i+j].second[shapeSize]);
+        }
+        arr[intable[i].first] = meanValues;
     }
     return arr;
 }

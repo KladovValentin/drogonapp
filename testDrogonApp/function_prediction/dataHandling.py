@@ -26,9 +26,11 @@ class My_dataset(Dataset):
 def load_dataset(config, dataTable):
     # transform to numpy, assign types, split on features-labels
     sentenceLength = 15
+    cellsLength = 24
+    channelsLength = 7
     df = dataTable
     dfn = df.to_numpy()
-    print(dfn)
+    #print(dfn)
 
 
     if (config.modelType == "LSTM"):
@@ -40,27 +42,27 @@ def load_dataset(config, dataTable):
             if i<(sentenceLength-1):
                 for j in range(sentenceLength-i-1):
                     xii = []
-                    for s in range(7):
-                        xii.append(dfn[0,6*(s)+0])
+                    for s in range(channelsLength):
+                        xii.append(dfn[0,24*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[0,:-1])
-                    yi.append(dfn[0,-6])
+                    yi.append(dfn[0,-24])
                 for j in range(i+1):
                     xii = []
-                    for s in range(7):
-                        xii.append(dfn[j,6*(s)+0])
+                    for s in range(channelsLength):
+                        xii.append(dfn[j,24*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[j,:-1])
-                    yi.append(dfn[j,-6])
+                    yi.append(dfn[j,-24])
                     
             else:
                 for j in range(sentenceLength):
                     xii = []
-                    for s in range(7):
-                        xii.append(dfn[i-sentenceLength+1+j,6*(s)+0])
+                    for s in range(channelsLength):
+                        xii.append(dfn[i-sentenceLength+1+j,24*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[i-sentenceLength+1+j,:-1])
-                    yi.append(dfn[i-sentenceLength+1+j,-6])
+                    yi.append(dfn[i-sentenceLength+1+j,-24])
             x.append(xi)
             y.append(yi)
         x = np.array(x).astype(np.float32)
@@ -75,24 +77,24 @@ def load_dataset(config, dataTable):
             if i<(sentenceLength-1):
                 for j in range(sentenceLength-i-1):
                     xii = []
-                    yii = dfn[0,-6:-3]
-                    for s in range(7):
-                        xii.append(dfn[0,6*(s):6*(s+1)-3])
+                    yii = dfn[0,-cellsLength:]
+                    for s in range(channelsLength):
+                        xii.append(dfn[0,cellsLength*(s):cellsLength*(s+1)])
                     xi.append(xii)
                     yi.append(yii)
                 for j in range(i+1):
                     xii = []
-                    yii = dfn[j,-6:-3]
-                    for s in range(7):
-                        xii.append(dfn[j,6*(s):6*(s+1)-3])
+                    yii = dfn[j,-cellsLength:]
+                    for s in range(channelsLength):
+                        xii.append(dfn[j,cellsLength*(s):cellsLength*(s+1)])
                     xi.append(xii)
                     yi.append(yii)
             else:
                 for j in range(sentenceLength):
                     xii = []
-                    yii = dfn[i-sentenceLength+1+j,-6:-3]
-                    for s in range(7):
-                        xii.append(dfn[i-sentenceLength+1+j,6*(s):6*(s+1)-3])
+                    yii = dfn[i-sentenceLength+1+j,-cellsLength:]
+                    for s in range(channelsLength):
+                        xii.append(dfn[i-sentenceLength+1+j,cellsLength*(s):cellsLength*(s+1)])
                     xi.append(xii)
                     yi.append(yii)
             x.append(xi)
@@ -126,13 +128,11 @@ class DataManager():
         x = dfn[:,:].astype(np.float32)
         mean = np.array( [np.mean(x[:,j+1]) for j in range(x.shape[1]-1)] )
         std  = np.array( [np.std( x[:,j+1]) for j in range(x.shape[1]-1)] )
-        print(mean)
-        print(std)
-
     
         for i in range(x.shape[1]-1):
-            selection = ((x[:,i+1]-mean[i])/std[i]>-5) & ((x[:,i+1]-mean[i])/std[i]<5)
-            print(selection)
+            if (std[i]!=0): 
+                selection = ((x[:,i+1]-mean[i])/std[i]>-5) & ((x[:,i+1]-mean[i])/std[i]<5)
+            #print(selection)
             x1 = x[selection,i+1]
             mean[i] = np.mean(x1)
             std[i] = np.std(x1)
@@ -150,14 +150,17 @@ class DataManager():
 
 
     def normalizeDataset(self, df, meanValues, stdValues):
-        print(df)
+        #print(df)
         columns = list(df.columns)
         masks = []
         for i in range(len(self.poorColumnValues)):
             masks.append(df[self.poorColumnValues[i][0]]==self.poorColumnValues[i][1])
 
         for i in range(len(columns)-1):
-            df[columns[i+1]] = (df[columns[i+1]]-meanValues[i])/stdValues[i]
+            if (stdValues[i]!=0):
+                df[columns[i+1]] = (df[columns[i+1]]-meanValues[i])/stdValues[i]
+            else:
+                df[columns[i+1]] = (df[columns[i+1]]-meanValues[i])/1
         
         for i in range(len(self.poorColumnValues)):
             df[self.poorColumnValues[i][0]].mask(masks[i], 0, inplace=True)
@@ -193,7 +196,8 @@ class DataManager():
         #self.prepareTable
         dir = str(Path(__file__).parents[1])
         #print(dir)
-        dftCorr = self.getDataset(path + "nn_input/outNNTest1.dat", "simLabel")
+        # outNNTestSM / outNNTest1
+        dftCorr = self.getDataset(path + "nn_input/outNNTestSM.dat", "simLabel")
         #print(dftCorr)
 
         dftTV = dftCorr.iloc[:int(dftCorr.shape[0]*0.7)].copy()
@@ -203,7 +207,6 @@ class DataManager():
 
         #print(dftCorr)
         #print(dftTest)
-        #print(dftCorr)
 
         mean, std = 0, 0
         if (mod == "train_nn"):
@@ -224,11 +227,11 @@ class DataManager():
         mean1, std1 = self.meanAndStdTable(dftCorr)
         print("mean values: " + str(mean1))
         print("std  values: " + str(std1))
-        print(dftCorr)
+        #print(dftCorr)
 
         pq.write_table(pa.Table.from_pandas(dftCorr), pathFP + 'simu1.parquet')
         pq.write_table(pa.Table.from_pandas(dftTest), pathFP + 'tesu1.parquet')
-        print(dftCorr)
+        #print(dftCorr)
 
         if (mod.startswith("train")):
             writeTrainData(mean,std, pathFP)

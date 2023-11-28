@@ -55,6 +55,7 @@ class NeuralNetwork {
         void drawInputTargetCorrelations(vector< vector<double> > targets, vector< vector<double> > inputs);
         void drawTargetStability(TGraphErrors* targetsAll, TGraphErrors* targetsPP, TGraphErrors* targetsHH);
         void drawTargetSectorComparison();
+        void drawTargetDimensionsComp(std::map< int, vector<double> > meanToTModSec, vector<int> shape);
 
         void remakeInputDataset();
         void retrainModel();

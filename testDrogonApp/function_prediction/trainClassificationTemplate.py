@@ -161,7 +161,7 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         
         batch_size = 512
         weight_decay = 0.03
-        lr = 0.01
+        lr = 0.005
         nLayers = 3
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
@@ -190,7 +190,7 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         if (config.modelType == "DNN"):
             nn_model = DNN(input_dim=input_dim[-1], output_dim=1, nLayers=nLayers, nNeurons=nNeurons).type(torch.FloatTensor)
         elif (config.modelType == "LSTM"):
-            nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
+            nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
         elif (config.modelType == "ConvLSTM"):
             nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=6)
 
@@ -203,7 +203,7 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
 
         print("prepared to train nn")
-        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, 100, valid_loader, scheduler = scheduler)
+        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, 200, valid_loader, scheduler = scheduler)
 
         print("trained nn, valid acc = " + str(loc_acc))
 
@@ -215,9 +215,9 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         if (config.modelType == "DNN"):
             modelRandInput = torch.randn(1, input_dim[-1])
         elif (config.modelType == "LSTM"):
-            modelRandInput = torch.randn(1, 15, input_dim[-1])
+            modelRandInput = torch.randn(1, input_dim[0], input_dim[-1])
         elif (config.modelType == "ConvLSTM"):
-            modelRandInput = torch.randn(1, 15, input_dim[-3], input_dim[-2], input_dim[-1])
+            modelRandInput = torch.randn(1, input_dim[0], input_dim[-3], input_dim[-2], input_dim[-1])
         torch.onnx.export(nn_model,                                # model being run
                   modelRandInput,    # model input (or a tuple for multiple inputs)
                   mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)
@@ -247,6 +247,7 @@ mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/
 
 dataManager = DataManager()
 dataManager.manageDataset("train_nn",mainPath)
+
 
 train_NN(mainPath)
 

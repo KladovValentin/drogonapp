@@ -26,7 +26,7 @@ def loadModel(config, input_dim, nClasses, path):
     if (config.modelType == "DNN"):
         nn_model = DNN(input_dim=input_dim[-1], output_dim=nClasses, nLayers=3, nNeurons=200).type(torch.FloatTensor)
     elif (config.modelType == "LSTM"):
-        nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=15).type(torch.FloatTensor)
+        nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
     elif (config.modelType == "ConvLSTM"):
         nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=6)
     nn_model.type(torch.FloatTensor)
@@ -67,10 +67,12 @@ def makePredicionList(config, experiment_path, savePath, path):
     #mean = mean[-6:]
     #std = std[-6:]
     
+    #shape exp_dataset: []
 
     #nClasses = dftCorrExp[list(dftCorrExp.columns)[-1]].nunique()
     nClasses = 1
     input_dim = exp_dataset[0][0].shape
+    print("input shape is ",input_dim)
 
     #load nn and predict
     nn_model = loadModel(config, input_dim, nClasses, path)
@@ -81,19 +83,21 @@ def makePredicionList(config, experiment_path, savePath, path):
     for i_step, (x, y) in enumerate(tepoch):
         tepoch.set_description(f"Epoch {1}")
         if (config.modelType != "ConvLSTM"):
-            prediction = (nn_model(x).detach().numpy()[:,-1])*std[-6] + mean[-6]
+            prediction = (nn_model(x).detach().numpy()[:,-1])*std[-24] + mean[-24]
+            print(prediction.shape)
         else:
             prediction = (nn_model(x).detach().numpy())[:,-1,:]
             for i in range(input_dim[-2]):
-                prediction[:,i] = prediction[:,i]*std[-6+i] + mean[-6+i]
-        print(prediction.shape)
+                prediction[:,i] = prediction[:,i]*std[-input_dim[-2]+i] + mean[-input_dim[-2]+i]
+            print(prediction)
+            #print(prediction.shape)
         dat_list.append(pandas.DataFrame(prediction))
 
     fullPredictionList = pandas.concat(list(dat_list),ignore_index=True)
     pq.write_table(pa.Table.from_pandas(fullPredictionList), path + savePath+'.parquet')
 
-    print(runColumn)
-    print(fullPredictionList)
+    #print(runColumn)
+    #print(fullPredictionList)
     fullPreductionListWithRun = pandas.concat([runColumn,fullPredictionList],axis=1)
     np.savetxt(path + savePath+'.txt', fullPreductionListWithRun.values)
     return fullPredictionList
@@ -104,7 +108,7 @@ def draw_predictions_spread(outputs):
 
     bins = np.linspace(-5, 5, 20)
 
-    plt.hist(class_hist[:,1]-class_hist[:,2], bins, color='#0504aa',
+    plt.hist(class_hist[:,1]-class_hist[:,25], bins, color='#0504aa',
                             alpha=0.7, rwidth=0.95, label = '$\Delta prediction$')
     plt.legend(loc=[0.6,0.8])
     plt.grid(axis='y', alpha=0.75)
@@ -142,17 +146,29 @@ def draw_2d_param_spread(tables, column1, column2):
 
 def draw_pred_and_target_vs_run(dftable, dftable2):
     print(dftable)
+    
+    # Get length of spacial dimension (e.g. number of channels). Can be changed
+    chLength = int(len(dftable.columns)/2)
+
     indexes = dftable[list(dftable.columns)[0]].to_numpy()
     indexes2 = dftable2[list(dftable2.columns)[0]].to_numpy()
     nptable = dftable.to_numpy()
     nptable2 = dftable2.to_numpy()
 
-    plt.plot(indexes, nptable[:,1], color='#0504aa', label = 'target test', marker='o', linestyle="None", markersize=0.8)
-    plt.plot(indexes, nptable[:,2], color='#8b2522', label = 'prediction test', marker='o', linestyle="None", markersize=0.7)
-    plt.plot(indexes2, nptable2[:,1], color='#0504aa', label = 'target train', marker='o', linestyle="None", markersize=0.8)
-    plt.plot(indexes2, nptable2[:,2], color='#228B22', label = 'prediction train', marker='o', linestyle="None", markersize=0.7)
+    mean, std = readTrainData(path)
+    for i in range(chLength):
+
+        # Get difference target-prediction in terms of sigma (std) for train and test parts
+        nptable[:,i+1+chLength] = (nptable[:,i+1+chLength] - nptable[:,i+1])/std[-chLength+i]
+        nptable2[:,i+1+chLength] = (nptable2[:,i+1+chLength] - nptable2[:,i+1])/std[-chLength+i]
+
+        #plt.plot(indexes, nptable[:,i+1], color='#0504aa', label = 'target test'+str(i), marker='o', linestyle="None", markersize=0.8)
+        plt.plot(indexes, nptable[:,i+1+chLength], color='#8b2522', label = 'prediction test'+str(i), marker='o', linestyle="None", markersize=1.7)
+        #plt.plot(indexes2, nptable2[:,i+1], color='#0504aa', label = 'target train'+str(i), marker='o', linestyle="None", markersize=0.8)
+        plt.plot(indexes2, nptable2[:,i+1+chLength], color='#228B22', label = 'prediction train'+str(i), marker='o', linestyle="None", markersize=1.7)
+    
     #plt.legend(loc=[0.6,0.8])
-    plt.ylim(4, 7.5)
+    #plt.ylim(4, 7.5)
     plt.grid(axis='y', alpha=0.75)
     plt.xlabel('run number')
     plt.ylabel('dE/dx, a.u.')
@@ -162,11 +178,11 @@ def draw_pred_vs_target(dftable):
     nptable = dftable.to_numpy()
     h1 = plt.hist2d(nptable[:,1],nptable[:,2], bins = (60,30), cmin=5, cmap=plt.cm.jet)
     plt.colorbar(h1[3])
-    plt.plot(np.arange(-3,3), np.arange(-3,3))
+    plt.plot(np.arange(0,1000), np.arange(0,1000))
     plt.xlabel('target')
     plt.ylabel('prediction')
-    plt.xlim([-3, 3])
-    plt.ylim([-3, 3])
+    #plt.xlim([-3, 3])
+    #plt.ylim([-3, 3])
     plt.show()
 
 
@@ -178,9 +194,9 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     print(dftCorrExp)
 
     localCNames = list(dftCorrExp.columns)
-    for i in range(len(localCNames)-7):
+    for i in range(len(localCNames)-25):
         dftCorrExp.drop(localCNames[i+1],axis=1,inplace=True)
-    for i in range(5):
+    for i in range(0):
         dftCorrExp.drop(localCNames[len(localCNames) -i -1],axis=1,inplace=True)
     dftCorrExp = dftCorrExp.join(pT[list(pT.columns)])
 
@@ -190,9 +206,9 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     pTS.rename(columns={list(pTS.columns)[0] : '0'}, inplace=True)
 
     localCNames = list(dftCorrExpS.columns)
-    for i in range(len(localCNames)-7):
+    for i in range(len(localCNames)-25):
         dftCorrExpS.drop(localCNames[i+1],axis=1,inplace=True)
-    for i in range(5):
+    for i in range(0):
         dftCorrExpS.drop(localCNames[len(localCNames) - i -1],axis=1,inplace=True)
     dftCorrExpS = dftCorrExpS.join(pTS[list(pTS.columns)])
     print(dftCorrExpS)

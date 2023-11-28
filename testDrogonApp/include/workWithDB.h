@@ -34,7 +34,8 @@ class EpicsDBManager {
         vector<string> channel_ids;
         vector<string> channel_names;
         vector<size_t> shape;
-        vector< pair <string, string> > dbnames;
+        vector< pair <vector<int>, string> > dbnames;
+        vector< vector<int> > allToUniqueMapping;
         pqxx::connection* pqxxConnection;
         string base_string;
         string chan_string;
@@ -44,7 +45,7 @@ class EpicsDBManager {
         ~EpicsDBManager();
         
         void remakeChannelIds();
-        void changeChannelNames(vector<size_t> shapeNew, vector< pair <string, string> > dbnamesNew);
+        void changeChannelNames(vector<size_t> shapeNew, vector< pair <vector<int>, string> > dbnamesNew);
         void changeListeningPort(int newPort);
 
         vector<double> getDBdataBase(string command, string dateLeft);        

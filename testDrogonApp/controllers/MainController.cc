@@ -18,6 +18,8 @@ MainController::MainController() {
     epicsManager = new EpicsDBManager(serverData->getDbListeningPort());
     neuralNetwork = new NeuralNetwork();
 
+    cout << "b" << endl;
+
 
     triggerManager->changeHistsLocation(serverData->getTrHistsLoc());
     triggerManager->changeChannels(serverData->getTrChannels());
@@ -26,8 +28,9 @@ MainController::MainController() {
     controllerBase = new ControllerBase(triggerManager, epicsManager, neuralNetwork, serverData); 
 
     //epicsManager->makeTableWithEpicsData("new", 444140006, 1e9);
-    neuralNetwork->remakeInputDataset();
-    //neuralNetwork->retrainModel();
+    //epicsManager->makeTableWithEpicsData("new", 444472254, 444533980);
+    //neuralNetwork->remakeInputDataset();
+    neuralNetwork->retrainModel();
     //controllerBase->compareTargetPredictionFromTraining();
 
 }
@@ -95,7 +98,7 @@ void MainController::setSettings(const HttpRequestPtr &req, std::function<void (
 }
 void MainController::getSettings(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback){
     string histsLocation = serverData->getTrHistsLoc();
-    vector< pair <string, string> > channelsdb = serverData->getDbChannels();
+    vector< pair <vector<int>, string> > channelsdb = serverData->getDbChannels();
     vector<int> channelstr = serverData->getTrChannels();
     Json::Value ret;
     ret["histsLocation"] = histsLocation;

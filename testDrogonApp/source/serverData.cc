@@ -16,7 +16,7 @@ ServerData::ServerData(){
 }
 
 ServerData::~ServerData(){
-    writeSettings();
+    //writeSettings();
     writePredictedValues();
 }
 
@@ -43,6 +43,8 @@ void ServerData::readSettings(){
         while (ssShape >> shapeEl)
             dbShape.push_back(shapeEl);
         
+        int n_dim = dbShape.size()-1; // dimensions of spacial parametrization (excluding channels dim)
+        
         dbNames.clear();
         while (1){
             std::getline(fin0, line);
@@ -50,18 +52,25 @@ void ServerData::readSettings(){
                 break;
             std::stringstream ss1(line);
             string multi, dbname;
-            ss1 >> multi >> dbname;
-            if (multi != "0" && multi != "1"){
-                continue;
+            int multiI = 0;
+            vector<int> multiVect;
+            for (size_t i = 0; i < n_dim; i++){
+                ss1 >> multiI;
+                multiVect.push_back(multiI);
             }
+            ss1 >> dbname; 
+            //ss1 >> multi >> dbname; 
+            //if (multi != "0" && multi != "1"){
+            //    continue;
+            //}
             //if (((TString)dbname).Contains("%")){
             //    dbname = (string)(Form(dbname.c_str(),1));
             //}
-            dbNames.push_back(make_pair(multi, dbname));
-            //cout << dbname << endl;
+            dbNames.push_back(make_pair(multiVect, dbname));
+            cout << dbname << endl;
         }
     }
-    for(pair <string, string> dbname: dbNames){
+    for(pair <vector<int>, string> dbname: dbNames){
         cout << dbname.second << " ";
     }
     cout << endl;
@@ -79,7 +88,7 @@ void ServerData::writeSettings(){
         fout << x << "  ";
     fout << endl;
 
-    for (pair <string,string> x: dbNames)
+    for (pair <vector<int>,string> x: dbNames)
         fout << x.second << "  ";
     fout << endl;
 

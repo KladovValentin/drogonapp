@@ -63,6 +63,7 @@ namespace preTrainFunctions {
     extern vector< pair< int, vector<double> > > readClbTableFromFile(string fName);
     extern vector< pair< string, vector<double> > > readDBTableFromFile(string fName);
     extern vector< vector<double> > clbTableToVectorsTarget(vector< pair< int, vector<double> > > intable);
+    extern map< int, vector<double> > clbTableToVectorsTarget(vector< pair< int, vector<double> > > intable, vector<int> shape);
     extern vector< vector<double> > clbTableToVectorsInput(vector< pair< int, vector<double> > > intable);
     extern vector< vector<double> > dbTableToVectorsAveraged(vector< pair< string, vector<double> > > table);
 };

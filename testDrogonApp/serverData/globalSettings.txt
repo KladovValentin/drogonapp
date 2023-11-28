@@ -1,13 +1,13 @@
 /home/localadmin_jmesschendorp/lustre/hades/dst/feb22/gen2/
 78  79  80  117  118  
 epics channels
-7 6
-0 HAD:MDC:GAS:reflowPressureAthm
-0 HAD:MDC:PS:05:GETVOLTS
-0 HAD:MDC:GAS:CO2:concentration
-1 HAD:MDC:P3:S%d:p_delta
-0 HAD:MDC:GAS:P1:H2O
-0 HAD:MDC:GAS:DewPointMeter
-1 HAD:MDC:P1:S%d:M1:temp
+7 4 6
+0 0 HAD:MDC:GAS:reflowPressureAthm
+1 1 HAD:MDC:HV:P%d:S%d:C:v0set
+0 0 HAD:MDC:GAS:CO2:concentration
+1 1 HAD:MDC:P%d:S%d:p_delta
+0 0 HAD:MDC:GAS:P2:H2O
+0 0 HAD:MDC:GAS:DewPointMeter
+0 0 HAD:MDC:P2:S2:M1:temp
 listening port
 3335

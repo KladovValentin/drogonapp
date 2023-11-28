@@ -307,7 +307,7 @@ void NeuralNetwork::drawTargetSectorComparison(){
         //    grClbAll[i]->GetYaxis()->SetRangeUser(-2,2);
         grClbAll[i]->GetXaxis()->SetTimeDisplay(1);
         grClbAll[i]->GetXaxis()->SetTimeFormat("%d/%m");
-        grClbAll[i]->SetTitle(Form("sector%d;time;ratio %d/1",i+1,i+1));
+        grClbAll[i]->SetTitle(Form("sector%zu;time;ratio %zu/1",i+1,i+1));
         grClbAll[i]->GetXaxis()->SetLabelSize(0.05);
         grClbAll[i]->GetYaxis()->SetLabelSize(0.05);
         grClbAll[i]->GetXaxis()->SetTitleSize(0.08);
@@ -315,7 +315,7 @@ void NeuralNetwork::drawTargetSectorComparison(){
         grClbAll[i]->GetXaxis()->SetTitleOffset(0.65);
         grClbAll[i]->GetYaxis()->SetTitleOffset(0.5);
         if (i == 0)
-            grClbAll[i]->SetTitle(Form("sector%d;time;relative change",i+1));
+            grClbAll[i]->SetTitle(Form("sector%zu;time;relative change",i+1));
     }
 
     gStyle->SetTitleFontSize(0.1); // Adjust the value as needed
@@ -325,7 +325,7 @@ void NeuralNetwork::drawTargetSectorComparison(){
     canvas->Divide(2, 3); // Divide canvas into 3 rows and 1 column
     for (size_t i = 0; i < 6; i++){
         canvas->cd(i+1);
-        TPad* pad = new TPad(Form("pad%d", i + 1), Form("Pad %d", i + 1), 0.0, 0.0, 1.0, 1.0);
+        TPad* pad = new TPad(Form("pad%zu", i + 1), Form("Pad %zu", i + 1), 0.0, 0.0, 1.0, 1.0);
         pad->SetBottomMargin(0.15);
         pad->Draw();
         pad->cd();
@@ -335,20 +335,120 @@ void NeuralNetwork::drawTargetSectorComparison(){
         cin.get();
     }
     delete canvas;
+}
 
+void NeuralNetwork::drawTargetDimensionsComp(std::map< int, vector<double> > meanToTModSec, vector<int> shape){
+    // draw in a loop
+    // share_pointers (smart_pointers)
+
+    int outShapeLength = 1; for (int x: shape){ outShapeLength*=x; }
+    const int shapeLength = outShapeLength;
+
+    TString title[outShapeLength];
+    for (size_t i = 0; i < shapeLength; i++){
+        for (size_t j = 0; j < shape.size(); j++){
+            title[i] += Form("dim%zu %zu,",j+1, i+1);
+        }
+    }
+    
+
+    // Get vectors of runs and values
+    vector<double> runArr;
+    vector<double> valueArr[shapeLength];
+    for (auto rowI: meanToTModSec){
+        runArr.push_back(rowI.first);
+        for (size_t s = 0; s < shapeLength; s++){
+            valueArr[s].push_back(rowI.second[s]);
+        }
+    }
+
+    // Convert runs to time axis
+    runArr = timeVectToDateNumbers(runArr);
+
+    // Normalization
+    TGraph* grClbAll[shapeLength];
+    double mean0 = 0;
+    for (size_t i = 0; i < shapeLength; i++){
+        valueArr[i] = runningMeanVector(valueArr[i],20);
+        if (i == 0){
+            for (size_t j = 0; j < valueArr[i].size(); j++){
+                mean0+=valueArr[0][j];
+            }
+            mean0 = mean0/valueArr[0].size();
+        }
+        if (i>0){
+            for (size_t j = 0; j < valueArr[i].size(); j++){
+                valueArr[i][j] = valueArr[i][j]/valueArr[0][j];
+            }
+        }
+    }
+    for (size_t i = 0; i < 1; i++){
+        //valueArr[i] = normalizeVectorNN(valueArr[i]);
+        for (size_t j = 0; j < valueArr[i].size(); j++){
+            valueArr[i][j] = valueArr[i][j]/mean0;
+        }
+    }
+
+    // Just drawing below
+    for (size_t i = 0; i < shapeLength; i++){
+        grClbAll[i]  = new TGraph( runArr.size(), &runArr[0], &valueArr[i][0]);
+        grClbAll[i]->SetMarkerStyle(22);
+        grClbAll[i]->SetMarkerSize(0.5);
+        grClbAll[i]->SetMarkerColor(1);
+        grClbAll[i]->GetYaxis()->SetRangeUser(0.55,1.45);
+        //if (i == 0)
+        //    grClbAll[i]->GetYaxis()->SetRangeUser(-2,2);
+        grClbAll[i]->GetXaxis()->SetTimeDisplay(1);
+        grClbAll[i]->GetXaxis()->SetTimeFormat("%d/%m");
+        //grClbAll[i]->SetTitle(Form("sector%d;time;ratio %d/1",i+1,i+1));
+        grClbAll[i]->SetTitle(title[i]);
+        grClbAll[i]->GetXaxis()->SetTitle("time");
+        grClbAll[i]->GetYaxis()->SetTitle("ratio / 1");
+        grClbAll[i]->GetXaxis()->SetLabelSize(0.05);
+        grClbAll[i]->GetYaxis()->SetLabelSize(0.05);
+        grClbAll[i]->GetXaxis()->SetTitleSize(0.08);
+        grClbAll[i]->GetYaxis()->SetTitleSize(0.08);
+        grClbAll[i]->GetXaxis()->SetTitleOffset(0.65);
+        grClbAll[i]->GetYaxis()->SetTitleOffset(0.5);
+        if (i == 0)
+            //grClbAll[i]->SetTitle(Form("sector%d;time;relative change",i+1));
+            grClbAll[i]->GetYaxis()->SetTitle("relative change");
+    }
+
+    gStyle->SetTitleFontSize(0.1); // Adjust the value as needed
+    gStyle->SetLabelSize(0.45, "xy"); // Adjust the value as needed
+
+    TCanvas* canvas = new TCanvas("canvas", "Canvas Title", 1920, 950);
+    //canvas->Divide(2, 3); // Divide canvas into 3 rows and 1 column
+    for (size_t i = 0; i < shapeLength; i++){
+        //canvas->cd(i+1);
+        TPad* pad = new TPad(Form("pad%zu", i + 1), Form("Pad %zu", i + 1), 0.0, 0.0, 1.0, 1.0);
+        pad->SetBottomMargin(0.15);
+        pad->Draw();
+        pad->cd();
+        pad->SetGridy();
+        grClbAll[i]->Draw("AP");
+        canvas->Update();
+        cin.get();
+    }
+    delete canvas;
 }
 
 void NeuralNetwork::remakeInputDataset(){
+    vector<int> outShape = {4,6};
+    int outShapeLength = 1; for (int x: outShape){ outShapeLength*=x; }
+
     //vector< pair< string, vector<double> > > table = readDBTableFromFile(saveLocation+"info_tables/MDCALL1.dat");
     cout << "starting reading tables" << endl;
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL.dat");
-    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");
-    cout << "table mdc is read" << endl;
+    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");/
+    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1.dat");
+
     vector< pair< int, vector<double> > > tableTrig = readClbTableFromFile(saveLocation+"info_tables/trigger_data2.dat");
+
     vector< pair< int, vector<double> > > tableClb = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDC1New.dat");
     vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCAllNew.dat"); 
     vector< pair< int, vector<double> > > tableClbHH = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCHHNew.dat"); 
-    cout << "a" << endl;
     cout << table[15].first << "    " << table[15].second[1] << endl;
     cout << "tableas are read" << endl;
 
@@ -360,9 +460,11 @@ void NeuralNetwork::remakeInputDataset(){
     vector< vector<double> > meanToTAll = clbTableToVectorsTarget(tableClbAll);
     vector< vector<double> > meanToTHH = clbTableToVectorsTarget(tableClbHH);
 
-    vector< pair< int, vector<double> > > tableClbAllSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");     
+    vector< pair< int, vector<double> > > tableClbAllSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");
+    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModNew.dat");
+    std::map< int, vector<double> > meanToTModSec = clbTableToVectorsTarget(tableClbModSec, outShape);
 
-    vector< vector<double> > arr[6];
+    /*vector< vector<double> > arr[6];
     for (size_t s = 0; s < 6; s++){
         arr[s].resize(4,vector<double>(0));
     }
@@ -386,9 +488,8 @@ void NeuralNetwork::remakeInputDataset(){
                 arr[s][3].push_back(sectorsTargets[s].second);
             }
         }
-    }
+    }*/
     
-    cout << dbPars[0][15] << endl;
 
     //// ____ OUTPUT
 
@@ -404,37 +505,34 @@ void NeuralNetwork::remakeInputDataset(){
     }
 
     ///_____ Writing to a file
-    if (false){
+    bool writeFile = true;
+    if (writeFile){
         ofstream ofNN;
-        ofNN.open(saveLocation+"nn_input/outNNTest1.dat");
-        for (size_t i = 0; i<tableClbAll.size(); i++){
-            int run = tableClbAll[i].first;
-            double yTarget = meanToTAll[1][i];
-            auto p = std::find(dbPars[0].begin(), dbPars[0].end(), run);
-            auto pt = std::find(triggPars[0].begin(), triggPars[0].end(), run);
-            auto ps = std::find(arr[0][0].begin(), arr[0][0].end(), run);
-            //cout << std::distance(dbPars[0].begin(), p) << endl;
-            //cout << std::distance(triggPars[0].begin(), pt) << endl;
-            if (p != dbPars[0].end() && pt != triggPars[0].end() && ps != arr[0][0].end()){
-                //ofNN << dateRunF::runToDateNumber(run);
+        ofNN.open(saveLocation+"nn_input/outNNTestSM.dat"); //Test1
+        for (auto entry: meanToTModSec){
+            int run = entry.first;
+            auto p = std::find(dbPars[0].begin(), dbPars[0].end(), (double)run);
+            auto pt = std::find(triggPars[0].begin(), triggPars[0].end(), (double)run);
+            auto ps = meanToTModSec.find(run);
+            if (p != dbPars[0].end() && pt != triggPars[0].end() && ps != meanToTModSec.end()){
                 ofNN << (run);
+
                 int index = std::distance(dbPars[0].begin(), p);
                 for (size_t j = 0; j<dbPars.size()-1; j++){
                     if (std::find(additionalFilter.begin(), additionalFilter.end(), j) == additionalFilter.end())
                         ofNN << " " << dbPars[j+1][index];
                 }
+
                 int indext = std::distance(triggPars[0].begin(), pt);
                 for (size_t j = 0; j<triggPars.size()-1; j++){
                     //ofNN << " " << triggPars[j+1][indext];
                 }
-                int indexs = std::distance(arr[0][0].begin(), ps);
-                for (size_t s = 0; s < 6; s++){
-                    if ((int)arr[s][0][indexs] != run)
-                        cout << "run is not the same    "  << (int)arr[s][0][indexs] << " " << run << endl;
-                    ofNN << " " << arr[s][1][indexs];
+
+                //int indexs = std::distance(meanToTModSec.begin(), ps);
+                for (size_t s = 0; s < outShapeLength; s++){
+                    ofNN << " " << meanToTModSec[run][s];
                 }
                 ofNN << endl;
-                //ofNN << " " << yTarget << endl;
             }
         }
         ofNN.close();
@@ -483,8 +581,9 @@ void NeuralNetwork::remakeInputDataset(){
 
     /// Check for stability of the calibration depending on selection criteria
     //drawTargetSectorComparison();
+    //drawTargetDimensionsComp(meanToTModSec, outShape);
 
-    drawTargetStability(grClbAll,grClb,grClbHH);
+    //drawTargetStability(grClbAll,grClb,grClbHH);
 
     /// check for correlations between input and target for ml
     //drawInputTargetCorrelations(grClbAll,triggPars);

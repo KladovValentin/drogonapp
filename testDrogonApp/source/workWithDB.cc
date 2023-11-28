@@ -59,18 +59,67 @@ void EpicsDBManager::remakeChannelIds(){
     chan_string = chan_string + ")";
 }
 
-void EpicsDBManager::changeChannelNames(vector<size_t> shapeNew, vector< pair <string, string> > dbnamesNew){
+void EpicsDBManager::changeChannelNames(vector<size_t> shapeNew, vector< pair <vector<int>, string> > dbnamesNew){
     // transform channel names (with %d and multi) and shape into channelnames vector
     //shape = {7,6};
     shape = shapeNew;
+    int shapeLength = 1; for (size_t i = 1; i < shape.size(); i++){ shapeLength*=shape[i]; }
+    int n_dim = shapeNew.size()-1; // without channels
     dbnames = dbnamesNew;
     channel_names.clear();
-    for (pair<string, string> dbname: dbnames){
-        if (dbname.first == "0")
-            channel_names.push_back(dbname.second);
-        else if (dbname.first == "1")
-            for (size_t i = 0; i < shape[1]; i++)
-                channel_names.push_back((string)(Form(dbname.second.c_str(),i+1)));
+    allToUniqueMapping.clear();
+
+    /// temporary coordinates making
+    vector< vector<int> > coordinates;
+    for (size_t i = 0; i < shapeLength; i++){
+        vector<int> coordinates_i{i/6+1,i%6+1};
+        coordinates.push_back(coordinates_i);
+    }
+
+    for (pair<vector<int>, string> dbname: dbnames){
+        
+        /// Make full length channel names
+        vector<string> full_channel_names;
+        for (size_t i = 0; i < shapeLength; i++){
+            //n_dim = 3, coordinates_i = {1,3,2}, 
+            vector<int> pars_i;
+            for (size_t j = 0; j < n_dim; j++){
+                if (dbname.first[j])
+                    pars_i.push_back(coordinates[i][j]);
+            }
+            
+            /// Just push_back channel names, switch because TString poorly support vector arguments
+            switch (pars_i.size()) {
+                case 0:
+                    full_channel_names.push_back(dbname.second);
+                    break;
+                case 1:
+                    full_channel_names.push_back((string)(Form(dbname.second.c_str(), pars_i[0])));
+                    break;
+                case 2:
+                    full_channel_names.push_back((string)(Form(dbname.second.c_str(), pars_i[0],pars_i[1])));
+                    break;
+                case 3:
+                    full_channel_names.push_back((string)(Form(dbname.second.c_str(), pars_i[0],pars_i[1],pars_i[2])));
+                    break;
+                default:
+                    std::cout << "Invalid parameter size: [0-3] are acceptable" << std::endl;
+            }
+            
+        }
+
+        /// Remove repetance
+        vector<int> allToUniqueMapping_local;
+        std::unordered_set<std::string> seenElements;
+        for (size_t i = 0; i < shapeLength; i++){
+            string element = full_channel_names[i];
+            if (seenElements.insert(element).second) {
+                // If the element is not already in the set, add it to both the set and the result vector
+                channel_names.push_back(element);
+            }
+            allToUniqueMapping_local.push_back(channel_names.size()-1);
+        }
+        allToUniqueMapping.push_back(allToUniqueMapping_local);
     }
 
     //channel_names = dbnames;
@@ -104,6 +153,7 @@ vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
             prevDate = dateValue;
             double dbValue = row["float_val"].as<double>(); 
             int dbId = row["channel_id"].as<int>(); 
+            //cout << dbValue << "    " << dbId << endl;
 
             int index = -1;
             auto p = std::find(channel_ids.begin(), channel_ids.end(), to_string(dbId));
@@ -114,6 +164,7 @@ vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
             index = std::distance(channel_ids.begin(), p);
             resultT[index].push_back(dbValue);
         }
+
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return result;
@@ -128,9 +179,14 @@ vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
 
         /// fix situation if there are no measurements in the requested t range by getting the last existing entry
         if (resultT[i].size()==0){
+            //cout << "size zero? channel ";
+            //cout << channel_ids[i] << "    " << channel_names[i] << endl;
             pqxx::work w1(*pqxxConnection);
             pqxx::result rows = w1.exec(base_string + "channel_id=" + channel_ids[i] + " AND float_val!=0 AND smpl_time<='" + prevDate + "' ORDER BY smpl_time DESC LIMIT "+to_string(1));
-            double dbValue = rows.begin()["float_val"].as<double>(); 
+            double dbValue = 0;
+            auto row = rows.begin();
+            if (!row["float_val"].is_null() && !row["channel_id"].is_null() && !row["smpl_time"].is_null())
+                dbValue = row["float_val"].as<double>(); 
             meani = dbValue;
         }
         /// else we can have several measurements which are needed to be averaged
@@ -141,26 +197,14 @@ vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
         }
         result.push_back(meani);
     }
-    cout << result.size() << endl;
 
     vector<double> resultExpanded;
-    size_t resultIndex = 0;
+    int shapeLength = 1; for (size_t i = 1; i < shape.size(); i++){ shapeLength*=shape[i]; }
     for (size_t i = 0; i< shape[0]; i++){
-        if (dbnames[i].first == "0"){
-            for (size_t j = 0; j < shape[1]; j++){
-                resultExpanded.push_back(result[resultIndex]);
-            }
-            resultIndex += shape[1];
-        }
-        else {
-            for (size_t j = 0; j < shape[1]; j++){
-                resultExpanded.push_back(result[resultIndex]);
-                resultIndex += 1;
-            }
+        for (size_t j = 0; j < shapeLength; j++){
+            resultExpanded.push_back(result[allToUniqueMapping[i][j]]);
         }
     }
-
-    cout << resultExpanded.size() << endl;
     
     return resultExpanded;
 }
@@ -190,13 +234,15 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
     //vector<int> runBorders = loadrunlist(443670000, 1e9);
 
     std::ofstream fout;
+    //const char* saveFile = (saveLocation+"info_tables/MDCALLSec2.dat").c_str();
+    string saveFileStr = ((string)(saveLocation+"info_tables/MDCModSec1.dat"));
+    const char* saveFile = saveFileStr.c_str();
+    cout << "saving epics data to '" << saveFile << "' with mode " << mode << endl;
     if (mode == "new") 
-        fout.open((saveLocation+"info_tables/MDCALLSec2.dat").c_str());
+        fout.open(saveFile);
     else if (mode == "app") 
-        fout.open((saveLocation+"info_tables/MDCALLSec2.dat").c_str(), std::ios_base::app);
+        fout.open(saveFile, std::ios_base::app);
     
-
-
     size_t i = 0;
     while (i < runBorders.size()-1){
         vector<double> dbPars = getDBdata(runBorders[i],runBorders[i+1]);
@@ -209,7 +255,7 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
         /// save intermediate resulting table
         if ((i + 1) % 100 == 0) {
             fout.close();
-            fout.open((saveLocation+"info_tables/MDCALLSec2.dat").c_str(), std::ios_base::app);
+            fout.open(saveFile, std::ios_base::app);
             std::cout << "Saved data up to entry " << (i + 1) << std::endl;
         }
         i++;
