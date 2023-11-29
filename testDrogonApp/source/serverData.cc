@@ -9,14 +9,14 @@
 using namespace std;
 
 ServerData::ServerData(){
-    readSettings();
+    readSettingsJSON();
     readPredictedValues();
     runBorders = dateRunF::loadrunlist(0, 1e10);
     setCurrentRunIndex(2509);
 }
 
 ServerData::~ServerData(){
-    //writeSettings();
+    //readSettingsJSON();
     writePredictedValues();
 }
 
@@ -94,6 +94,58 @@ void ServerData::writeSettings(){
 
     fout << epicsDBPort << endl;
     fout.close();
+}
+
+void ServerData::writeSettingsJSON(){
+    Json::Value jsonObj;
+    jsonObj["triggerHistsFile"] = triggerHistsPath;
+
+    for (int& trChan: trigChannels)
+        jsonObj["triggerChannels"].append(trChan);
+
+    for (size_t& i: dbShape)
+        jsonObj["shape"].append(i);
+
+    for(pair <vector<int>, string> dbname: dbNames){
+        Json::Value a;
+        for (int& i: dbname.first)
+            a["parameters"].append(i);
+        a["name"] = dbname.second;
+        jsonObj["epics_channels"].append(a);
+    }
+
+    jsonObj["port"] = epicsDBPort;
+
+    std::ofstream outFile((saveLocation + "globalSettings.json").c_str());
+    outFile << std::setw(4) << jsonObj << std::endl;
+    outFile.close();
+}
+
+void ServerData::readSettingsJSON(){
+    Json::Value jsonObj;
+    std::ifstream inFile((saveLocation + "globalSettings.json").c_str());
+    inFile >> jsonObj;
+    inFile.close();
+
+    trigChannels.clear();
+    dbNames.clear();
+    dbShape.clear();
+
+    triggerHistsPath = jsonObj["triggerHistsFile"].asString();
+    for (const auto& entry : jsonObj["triggerChannels"])
+        trigChannels.emplace_back(entry.asInt());
+
+    for (const auto& entry : jsonObj["shape"])
+        dbShape.emplace_back(entry.asInt());
+    
+    epicsDBPort = jsonObj["port"].asInt();
+
+    for (const auto& entry : jsonObj["epics_channels"]) {
+        vector<int> a;
+        for (const auto& entry1 : entry["parameters"])
+            a.push_back(entry1.asInt());
+        dbNames.emplace_back(make_pair(a, entry["name"].asString()));
+    }
 }
 
 void ServerData::readPredictedValues(){

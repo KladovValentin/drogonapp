@@ -12,7 +12,7 @@ using namespace dateRunF;
 
 NeuralNetwork::NeuralNetwork(){
     additionalFilter = {};
-    setupNNPredictions();
+    //setupNNPredictions();
 }
 NeuralNetwork::~NeuralNetwork(){
 }

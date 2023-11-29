@@ -9,6 +9,9 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <iomanip>
+
+#include <jsoncpp/json/json.h>
 
 using namespace std;
 
@@ -37,6 +40,8 @@ class ServerData {
 
         void readSettings();
         void writeSettings();
+        void writeSettingsJSON();
+        void readSettingsJSON();
 
         void readPredictedValues();
         void writePredictedValues();

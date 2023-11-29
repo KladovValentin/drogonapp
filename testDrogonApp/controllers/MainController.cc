@@ -30,8 +30,11 @@ MainController::MainController() {
     //epicsManager->makeTableWithEpicsData("new", 444140006, 1e9);
     //epicsManager->makeTableWithEpicsData("new", 444472254, 444533980);
     //neuralNetwork->remakeInputDataset();
-    neuralNetwork->retrainModel();
+    //neuralNetwork->retrainModel();
     //controllerBase->compareTargetPredictionFromTraining();
+
+    //serverData->readSettingsJSON();
+    //serverData->writeSettingsJSON();
 
 }
 
