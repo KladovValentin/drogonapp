@@ -233,22 +233,23 @@ class Conv2dLSTM(nn.Module):
         self.intermediate_size = 8
 
         self.nn_model = nn.ModuleList([nn.Sequential(
-            nn.Linear(self.input_size, 256, bias=True),
+            nn.Linear(self.intermediate_size, 256, bias=True),
             #nn.BatchNorm1d(256),
             nn.LeakyReLU(inplace=True),
-            nn.Linear(256, self.intermediate_size),
+            nn.Linear(256, self.embedding_size),
             #nn.BatchNorm1d(self.intermediate_size)
         ) for _ in range(self.height)])
 
         self.nn_model2 = nn.Sequential(
-            nn.Linear(self.intermediate_size, 256, bias=True),
+            #nn.Linear(self.intermediate_size, 256, bias=True),
+            nn.Linear(self.input_size, 256, bias=True),
             nn.BatchNorm1d(256),
             nn.LeakyReLU(inplace=True),
             nn.Linear(256, 256, bias=True),
             nn.BatchNorm1d(256),
             nn.LeakyReLU(inplace=True),
-            nn.Linear(256, self.embedding_size),
-            nn.BatchNorm1d(self.embedding_size)
+            nn.Linear(256, self.intermediate_size),
+            nn.BatchNorm1d(self.intermediate_size)
         )
 
 
@@ -260,18 +261,22 @@ class Conv2dLSTM(nn.Module):
 
         inputDeep = input.movedim(-3,-1)
 
+        inputDeep = inputDeep.reshape((batch_size*sentence_length*self.height*self.width, self.input_size))
+        inputDeep = (self.nn_model2(inputDeep)).reshape((batch_size, sentence_length, self.height, self.width, self.intermediate_size))
+
         embedded1 = [inputDeep[:,:,i,:,:] for i in range(self.height)]
-        embedded = torch.Tensor(batch_size, sentence_length, 1, self.width, self.intermediate_size)
+        embedded = torch.Tensor(batch_size, sentence_length, 1, self.width, self.embedding_size)
         for i in range(self.height):
-            embedded1[i] = (self.nn_model[i](embedded1[i].reshape((batch_size*sentence_length*self.width, self.input_size))))
-            embedded1[i] = embedded1[i].reshape((batch_size, sentence_length, 1, self.width, self.intermediate_size))
+            embedded1[i] = (self.nn_model[i](embedded1[i].reshape((batch_size*sentence_length*self.width, self.intermediate_size))))
+            embedded1[i] = embedded1[i].reshape((batch_size, sentence_length, 1, self.width, self.embedding_size))
             if (i == 0):
                 embedded = embedded1[i]
             else:
                 embedded = torch.cat((embedded, embedded1[i]), dim=2)
 
-        embedded = embedded.reshape((batch_size*sentence_length*self.height*self.width, self.intermediate_size))
-        embedded = (self.nn_model2(embedded)).reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
+        #embedded = embedded.reshape((batch_size*sentence_length*self.height*self.width, self.intermediate_size))
+        #embedded = inputDeep.reshape((batch_size*sentence_length*self.height*self.width, self.input_size))
+        #embedded = (self.nn_model2(embedded)).reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
         
         #inputDeep1 = inputDeep.reshape((batch_size*sentence_length, self.height*self.width*self.input_size))
         #embedded = self.nn_model(inputDeep1)

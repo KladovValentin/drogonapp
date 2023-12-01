@@ -28,7 +28,7 @@ def loadModel(config, input_dim, nClasses, path):
     elif (config.modelType == "LSTM"):
         nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
     elif (config.modelType == "ConvLSTM"):
-        nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=6)
+        nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1)
     nn_model.type(torch.FloatTensor)
     nn_model.load_state_dict(torch.load(path+"tempModel.pt"))
     return nn_model

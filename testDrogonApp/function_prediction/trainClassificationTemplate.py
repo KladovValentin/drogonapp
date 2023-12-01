@@ -159,7 +159,7 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         batch_size, lr, nNeurons, nLayers, weight_decay = varyHyperparameters()
         print(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay))
         
-        batch_size = 512
+        batch_size = 512 #512
         weight_decay = 0.03
         lr = 0.005
         nLayers = 3
@@ -192,7 +192,7 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         elif (config.modelType == "LSTM"):
             nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
         elif (config.modelType == "ConvLSTM"):
-            nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=6)
+            nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1) #16 16
 
         loss = nn.MSELoss()
 

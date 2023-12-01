@@ -43,6 +43,8 @@ class EpicsDBManager {
     public:
         EpicsDBManager(int port);
         ~EpicsDBManager();
+
+        void connectToDB();
         
         void remakeChannelIds();
         void changeChannelNames(vector<size_t> shapeNew, vector< pair <vector<int>, string> > dbnamesNew);

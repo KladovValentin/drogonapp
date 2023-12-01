@@ -12,6 +12,15 @@ EpicsDBManager::EpicsDBManager(int port){
     //channel_ids = {"8564"};
     listeningPort = port; // 3335
 
+    connectToDB();
+
+    // Convert names to ids
+    //remakeChannelIds();
+    
+}
+EpicsDBManager::~EpicsDBManager(){}
+
+void EpicsDBManager::connectToDB(){
     // check if port is listening already. If not - make it listen 
     TString setupListening = (gSystem->GetFromPipe(("netstat -tulpn | grep '"+to_string(listeningPort)+"' | grep 'LISTEN'").c_str()));
     //cout << setupListening << endl;
@@ -26,13 +35,7 @@ EpicsDBManager::EpicsDBManager(int port){
     {
         cerr << "Failed to establish connection" << endl;
     }
-
-    // Convert names to ids
-    //remakeChannelIds();
-    
 }
-EpicsDBManager::~EpicsDBManager(){}
-
 
 void EpicsDBManager::remakeChannelIds(){
     channel_ids.clear();
@@ -166,8 +169,16 @@ vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
         }
 
     } catch (const std::exception& e) {
+        cout << "Error " << endl;
         std::cerr << "Error: " << e.what() << std::endl;
-        return result;
+        if (strstr(e.what(), "Connection refused") != nullptr){
+            connectToDB();   
+            return getDBdataBase(command, dateLeft);
+        }
+        else{
+            vector<double> resBad;
+            return resBad;
+        }
     }
     //w.commit();
     if (prevDate==""){
@@ -246,11 +257,14 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
     size_t i = 0;
     while (i < runBorders.size()-1){
         vector<double> dbPars = getDBdata(runBorders[i],runBorders[i+1]);
-        fout << runBorders[i] << "  ";
-        for (size_t j = 0; j < dbPars.size(); j++){
-            fout << dbPars[j] << "  ";
-        } 
-        fout << endl;
+        cout << runBorders[i] << "  " << dbPars.size() << endl;
+        if (dbPars.size() > 0){
+            fout << runBorders[i] << "  ";
+            for (size_t j = 0; j < dbPars.size(); j++){
+                fout << dbPars[j] << "  ";
+            } 
+            fout << endl;
+        }
 
         /// save intermediate resulting table
         if ((i + 1) % 100 == 0) {
