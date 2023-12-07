@@ -3,8 +3,8 @@ import torch
 #import torch_geometric
 from torch_geometric.nn import ChebConv
 from torch_geometric.nn.inits import glorot, zeros
-import torch.nn.functional as F
-from torch_geometric_temporal.nn.recurrent import GConvLSTM
+#import torch.nn.functional as F
+#from torch_geometric_temporal.nn.recurrent import GConvLSTM
 from torch.autograd import Function
 from torch.autograd import Variable
 import numpy as np
@@ -294,7 +294,7 @@ class GCN(torch.nn.Module):
         inputDeep = (self.nn_model2(inputDeep)).reshape((batch_size, sentence_length, self.nodes, self.intermediate_size))
 
         embedded1 = [inputDeep[:,:,i,:] for i in range(self.nodes)]
-        embedded = torch.Tensor(batch_size, sentence_length, 1, self.embedding_size)
+        embedded = torch.zeros(batch_size, sentence_length, 1, self.embedding_size)
         for i in range(self.nodes):
             embedded1[i] = (self.nn_model[i](embedded1[i].reshape((batch_size*sentence_length, self.intermediate_size))))
             embedded1[i] = embedded1[i].reshape((batch_size, sentence_length, 1, self.embedding_size))
@@ -319,7 +319,7 @@ class GCN(torch.nn.Module):
         for layer in range(self.num_layers):
             hidden.append((h0[layer], h0[layer]))
 
-        result_tensor = torch.Tensor(batch_size, 1, self.nodes)
+        result_tensor = torch.zeros(batch_size, 1, self.nodes)
         
         for t in range(sentence_length):
 

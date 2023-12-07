@@ -168,7 +168,7 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
         
         batch_size = 512 #512
         weight_decay = 0.03
-        lr = 0.005
+        lr = 0.01
         nLayers = 3
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
@@ -218,7 +218,7 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
         #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
 
         print("prepared to train nn")
-        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, 200, valid_loader, scheduler = scheduler)
+        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, 1, valid_loader, scheduler = scheduler)
 
         print("trained nn, valid acc = " + str(loc_acc))
 
@@ -234,7 +234,11 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
         elif (config.modelType == "ConvLSTM"):
             modelRandInput = torch.randn(1, input_dim[0], input_dim[-3], input_dim[-2], input_dim[-1])
         elif (config.modelType == "gConvLSTM"):
-            modelRandInput = (torch.randn(1, input_dim[0], input_dim[-2], input_dim[-1]),torch.randint(0,input_dim[-1]-1,(1,2,train_dataset[2][0].shape[0])),torch.ones(1,train_dataset[2][0].shape[0]))
+            edge_length = train_dataset[0][2].shape[0]
+            n_nodes = input_dim[-1]
+            e_i_r = torch.randint(0,n_nodes-1,(1,edge_length,2))
+            e_a_r = torch.ones(1,edge_length)
+            modelRandInput = (torch.randn(1, input_dim[0], input_dim[-2], n_nodes), e_i_r, e_a_r)
         torch.onnx.export(nn_model,                                # model being run
                   modelRandInput,    # model input (or a tuple for multiple inputs)
                   mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)

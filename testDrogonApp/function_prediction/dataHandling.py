@@ -183,7 +183,7 @@ def load_dataset(config, dataTable):
                 e_ind[i][topLink] = 1
 
             e_ind2.append([i,rightLink])
-            if (topLink < cellsLength):
+            if (topLink < cellsLength and int(topLink)/6 != 2):
                 e_ind2.append([i,topLink])
         e_ind2 = np.array(e_ind2)
         e_att2 = np.ones((len(e_ind2),))
