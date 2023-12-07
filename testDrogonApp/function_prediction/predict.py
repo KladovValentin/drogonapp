@@ -14,12 +14,16 @@ import pyarrow.parquet as pq
 from models.model import DNN
 from models.model import LSTM
 from models.model import Conv2dLSTM
-from models.model import Conv2dLSTMCell
-from dataHandling import My_dataset, DataManager, load_dataset, readTrainData
+from models.model import GCN
+from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset, readTrainData
 from torch.utils.data import Dataset, SubsetRandomSampler, DataLoader
 from tqdm.auto import tqdm
 from tqdm import trange
 from config import Config
+
+
+mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
+dataManager = DataManager(mainPath)
 
 
 def loadModel(config, input_dim, nClasses, path):
@@ -29,6 +33,8 @@ def loadModel(config, input_dim, nClasses, path):
         nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
     elif (config.modelType == "ConvLSTM"):
         nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1)
+    elif (config.modelType == "gConvLSTM"):
+        nn_model = GCN(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1)
     nn_model.type(torch.FloatTensor)
     nn_model.load_state_dict(torch.load(path+"tempModel.pt"))
     return nn_model
@@ -53,6 +59,7 @@ def checkDistributions():
 
 def makePredicionList(config, experiment_path, savePath, path):
     dftCorr = pandas.read_parquet(path+ experiment_path+'.parquet')
+    dftCorr = dataManager.normalizeDataset(dftCorr)
     dftCorr.reset_index(drop=True, inplace=True)
     print("<ASDSADSAD")
     print(dftCorr)
@@ -61,6 +68,8 @@ def makePredicionList(config, experiment_path, savePath, path):
 
     dftCorrExp = dftCorr.drop(list(dftCorr.columns)[0],axis=1).copy()
     exp_dataset = My_dataset(load_dataset(config, dftCorrExp))
+    if (config.modelType == "gConvLSTM"):
+        exp_dataset = Graph_dataset(load_dataset(config, dftCorrExp))
     exp_dataLoader = DataLoader(exp_dataset, batch_size=512, drop_last=False)
 
     mean, std = readTrainData(path)
@@ -80,17 +89,23 @@ def makePredicionList(config, experiment_path, savePath, path):
 
     dat_list = []
     tepoch = tqdm(exp_dataLoader)
-    for i_step, (x, y) in enumerate(tepoch):
+    for i_step, (x, y, e_i, e_a) in enumerate(tepoch):
         tepoch.set_description(f"Epoch {1}")
-        if (config.modelType != "ConvLSTM"):
+        if (config.modelType == "LSTM"):
             prediction = (nn_model(x).detach().numpy()[:,-1])*std[-24] + mean[-24]
             print(prediction.shape)
-        else:
+        elif(config.modelType == "ConvLSTM"):
             prediction = (nn_model(x).detach().numpy())[:,-1,:]
-            for i in range(input_dim[-2]):
-                prediction[:,i] = prediction[:,i]*std[-input_dim[-2]+i] + mean[-input_dim[-2]+i]
+            n_nodes = input_dim[-2]
+            for i in range(n_nodes):
+                prediction[:,i] = prediction[:,i]*std[-n_nodes+i] + mean[-n_nodes+i]
             print(prediction)
-            #print(prediction.shape)
+        elif(config.modelType == "gConvLSTM"):
+            prediction = (nn_model(x,e_i,e_a).detach().numpy())[:,-1,:]
+            n_nodes = input_dim[-1]
+            for i in range(n_nodes):
+                prediction[:,i] = prediction[:,i]*std[-n_nodes+i] + mean[-n_nodes+i]
+            print(prediction)
         dat_list.append(pandas.DataFrame(prediction))
 
     fullPredictionList = pandas.concat(list(dat_list),ignore_index=True)
@@ -156,7 +171,7 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
     nptable2 = dftable2.to_numpy()
 
     mean, std = readTrainData(path)
-    for i in range(chLength):
+    for i in range(10):
 
         # Get difference target-prediction in terms of sigma (std) for train and test parts
         nptable[:,i+1+chLength] = (nptable[:,i+1+chLength] - nptable[:,i+1])/std[-chLength+i]
@@ -230,7 +245,7 @@ mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/
 path = mainPath+"function_prediction/"
 
 #print("start python predict")
-predict_nn("tesu1",'predicted1', path)
-predict_nn("simu1",'predicted', path)
+predict_nn("tesu",'predicted1', path)
+predict_nn("simu",'predicted', path)
 analyseOutput(path+"predicted1",path+"tesu", path+"predicted",path+"simu")
 #analyseOutput(path+"predictedSim.parquet",path+"simu.parquet")

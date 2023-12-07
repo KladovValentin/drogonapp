@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+#import torch_geometric.data as PyGData
 from torch.utils.data import Dataset, SubsetRandomSampler, DataLoader
 import uproot
 import pandas
@@ -21,6 +22,18 @@ class My_dataset(Dataset):
 
     def __getitem__(self, index):
         return torch.tensor(self.datasetX[index]), torch.tensor(self.datasetY[index])
+    
+
+class Graph_dataset(Dataset):
+    def __init__(self, dataTable):
+        self.datasetX, self.datasetY, self.edge_index, self.edge_attr = dataTable[0], dataTable[1], dataTable[2], dataTable[3]
+
+    def __len__(self):
+        return len(self.datasetY)
+
+    def __getitem__(self, index):
+        #data = PyGData.Data(x=x, y=y, edge_index=hitEdges[0], edge_attr=hitEdges[1].float())
+        return torch.tensor(self.datasetX[index]), torch.tensor(self.datasetY[index]), torch.LongTensor(self.edge_index), torch.Tensor(self.edge_attr)
 
 
 def load_dataset(config, dataTable):
@@ -31,6 +44,9 @@ def load_dataset(config, dataTable):
     df = dataTable
     dfn = df.to_numpy()
     #print(dfn)
+
+    e_ind = np.zeros((cellsLength,cellsLength))
+    e_att = np.ones((cellsLength,cellsLength)).astype(np.float32)
 
 
     if (config.modelType == "LSTM"):
@@ -102,6 +118,81 @@ def load_dataset(config, dataTable):
         x = (np.array(x).astype(np.float32))[...,np.newaxis]
         y = np.array(y).astype(np.float32)
 
+    elif (config.modelType == "gConvLSTM"):
+        x = []
+        y = []
+        for i in range(dfn.shape[0]):
+            xi = []
+            yi = []
+            if i<(sentenceLength-1):
+                for j in range(sentenceLength-i-1):
+                    xii = []
+                    yii = dfn[0,-cellsLength:]
+                    for s in range(channelsLength):
+                        xii.append(dfn[0,cellsLength*(s):cellsLength*(s+1)])
+                    xi.append(xii)
+                    yi.append(yii)
+                for j in range(i+1):
+                    xii = []
+                    yii = dfn[j,-cellsLength:]
+                    for s in range(channelsLength):
+                        xii.append(dfn[j,cellsLength*(s):cellsLength*(s+1)])
+                    xi.append(xii)
+                    yi.append(yii)
+            else:
+                for j in range(sentenceLength):
+                    xii = []
+                    yii = dfn[i-sentenceLength+1+j,-cellsLength:]
+                    for s in range(channelsLength):
+                        xii.append(dfn[i-sentenceLength+1+j,cellsLength*(s):cellsLength*(s+1)])
+                    xi.append(xii)
+                    yi.append(yii)
+            x.append(xi)
+            y.append(yi)
+        x = (np.array(x).astype(np.float32))
+        y = np.array(y).astype(np.float32)
+
+        e_ind2 = []
+        for i in range(cellsLength):
+            leftLink, rightLink, botLink, topLink = 0,0,0,0
+
+            if (i/6 == (i+1)/6):
+                rightLink = i+1
+            elif (i/6 + 1 == (i+1)/6):
+                rightLink = i-5
+            
+            if (i/6 == (i-1)/6):
+                leftLink = i-1
+            elif (i/6 - 1 == (i-1)/6):
+                leftLink = i+5
+
+            botLink = i - 6
+            topLink = i + 6
+
+            if (i == 0):
+                leftLink = i+5
+            if (i == cellsLength):
+                rightLink = i-5
+
+
+            e_ind[i][leftLink] = 1
+            e_ind[i][rightLink] = 1
+            if (botLink >= 0):
+                e_ind[i][botLink] = 1
+            if (topLink < cellsLength):
+                e_ind[i][topLink] = 1
+
+            e_ind2.append([i,rightLink])
+            if (topLink < cellsLength):
+                e_ind2.append([i,topLink])
+        e_ind2 = np.array(e_ind2)
+        e_att2 = np.ones((len(e_ind2),))
+        np.tile(e_ind2, (len(y), 1, 1))
+        np.tile(e_att2, (len(y), 1, 1))
+        np.tile(e_ind, (len(y), 1, 1))
+        np.tile(e_att, (len(y), 1, 1))
+            
+
     elif (config.modelType == "DNN"):
         x = dfn[:,:-1].astype(np.float32)
         y = dfn[:, -1].astype(np.float32)
@@ -110,14 +201,17 @@ def load_dataset(config, dataTable):
     #print(y)
     print('x shape = ' + str(x.shape))
     print('y shape = ' + str(y.shape))
+    if (config.modelType == "gConvLSTM"):
+        #print(e_ind)
+        return (x, y, e_ind2, e_att2)
     return (x, y)
 
 
 
 class DataManager():
-    def __init__(self) -> None:
+    def __init__(self, mainPath) -> None:
         self.poorColumnValues = []
-
+        self.mainPath = mainPath
 
 
     def meanAndStdTable(self, dataTable):
@@ -149,8 +243,10 @@ class DataManager():
         return mean, std
 
 
-    def normalizeDataset(self, df, meanValues, stdValues):
+    def normalizeDataset(self, df):
         #print(df)
+        pathFP = self.mainPath + 'function_prediction/'
+        meanValues, stdValues = readTrainData(pathFP)
         columns = list(df.columns)
         masks = []
         for i in range(len(self.poorColumnValues)):
@@ -165,13 +261,15 @@ class DataManager():
         for i in range(len(self.poorColumnValues)):
             df[self.poorColumnValues[i][0]].mask(masks[i], 0, inplace=True)
 
+        #print(df)
+
         return df
     
-    def cutDataset(self, df0, meanValues, stdValues):
+    def cutDataset(self, df0):
         #print("CUTTING")
         columns = list(df0.columns)
         df = df0.copy()
-        df = self.normalizeDataset(df, meanValues, stdValues)
+        df = self.normalizeDataset(df)
         #print(df)
 
         columns = list(df.columns)
@@ -190,14 +288,14 @@ class DataManager():
     
         return setTable
 
-    def manageDataset(self, mod, path):
-        pathFP = path + 'function_prediction/'
+    def manageDataset(self, mod):
+        pathFP = self.mainPath + 'function_prediction/'
 
         #self.prepareTable
         dir = str(Path(__file__).parents[1])
         #print(dir)
         # outNNTestSM / outNNTest1
-        dftCorr = self.getDataset(path + "nn_input/outNNTestSM.dat", "simLabel")
+        dftCorr = self.getDataset(self.mainPath + "nn_input/outNNTestSM.dat", "simLabel")
         #print(dftCorr)
 
         dftTV = dftCorr.iloc[:int(dftCorr.shape[0]*0.7)].copy()
@@ -209,32 +307,29 @@ class DataManager():
         #print(dftTest)
 
         mean, std = 0, 0
-        if (mod == "train_nn"):
+        if (mod.startswith("train")):
             mean, std = self.meanAndStdTable(dftCorr)
+            writeTrainData(mean,std, pathFP)
         elif (mod.startswith("test")):
             mean, std = readTrainData(pathFP)
 
-        dftCorr = self.cutDataset(dftCorr,mean,std).copy()
-        dftTest = self.cutDataset(dftTest,mean,std).copy()
+        dftCorr = self.cutDataset(dftCorr).copy()
+        dftTest = self.cutDataset(dftTest).copy()
 
         pq.write_table(pa.Table.from_pandas(dftCorr), pathFP + 'simu.parquet')
         pq.write_table(pa.Table.from_pandas(dftTest), pathFP + 'tesu.parquet')
 
+        dftCorr1 = self.normalizeDataset(dftCorr).copy()
 
-        dftCorr = self.normalizeDataset(dftCorr,mean,std).copy()
-        dftTest = self.normalizeDataset(dftTest,mean,std).copy()
-
-        mean1, std1 = self.meanAndStdTable(dftCorr)
+        mean1, std1 = self.meanAndStdTable(dftCorr1)
         print("mean values: " + str(mean1))
         print("std  values: " + str(std1))
         #print(dftCorr)
 
-        pq.write_table(pa.Table.from_pandas(dftCorr), pathFP + 'simu1.parquet')
-        pq.write_table(pa.Table.from_pandas(dftTest), pathFP + 'tesu1.parquet')
+        #pq.write_table(pa.Table.from_pandas(dftCorr), pathFP + 'simu1.parquetmanageDataset')
+        #pq.write_table(pa.Table.from_pandas(dftTest), pathFP + 'tesu1.parquet')
         #print(dftCorr)
 
-        if (mod.startswith("train")):
-            writeTrainData(mean,std, pathFP)
 
 
 

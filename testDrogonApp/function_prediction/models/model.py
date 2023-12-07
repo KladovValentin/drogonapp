@@ -1,5 +1,10 @@
 import torch.nn as nn
 import torch
+#import torch_geometric
+from torch_geometric.nn import ChebConv
+from torch_geometric.nn.inits import glorot, zeros
+import torch.nn.functional as F
+from torch_geometric_temporal.nn.recurrent import GConvLSTM
 from torch.autograd import Function
 from torch.autograd import Variable
 import numpy as np
@@ -105,6 +110,258 @@ class LSTM(torch.nn.Module):
         return hidden, cellst#.to(device)
 
 
+class GConvLSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size, kernel_size, bias=True, normalization = "sym"):
+        super(GConvLSTMCell, self).__init__()
+
+        self.in_channels = input_size[0]
+        self.n_nodes = input_size[1]
+        self.hidden_channels = hidden_size
+        self.K = kernel_size
+        self.normalization = normalization
+
+        self.bias = bias
+
+        #self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, input_size[1], input_size[2])))
+        #self.reset_parameters()
+        self._create_parameters_and_layers()
+        self._set_parameters()
+
+    def _create_input_gate_parameters_and_layers(self):
+
+        self.conv_x_i = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        self.conv_h_i = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+
+        self.w_c_i = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_i = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_forget_gate_parameters_and_layers(self):
+
+        self.conv_x_f = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        self.conv_h_f = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+
+        self.w_c_f = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_f = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_cell_state_parameters_and_layers(self):
+
+        self.conv_x_c = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        self.conv_h_c = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+
+        self.b_c = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_output_gate_parameters_and_layers(self):
+
+        self.conv_x_o = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        self.conv_h_o = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+
+        self.w_c_o = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_o = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_parameters_and_layers(self):
+        self._create_input_gate_parameters_and_layers()
+        self._create_forget_gate_parameters_and_layers()
+        self._create_cell_state_parameters_and_layers()
+        self._create_output_gate_parameters_and_layers()
+
+    def _set_parameters(self):
+        glorot(self.w_c_i)
+        glorot(self.w_c_f)
+        glorot(self.w_c_o)
+        zeros(self.b_i)
+        zeros(self.b_f)
+        zeros(self.b_c)
+        zeros(self.b_o)
+
+    def _calculate_input_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        I = self.conv_x_i(X, edge_index, edge_weight, lambda_max=lambda_max,batch=X.shape[0])
+        #print(I.shape)
+        #print(self.conv_h_i(H, edge_index, edge_weight, lambda_max=lambda_max,batch=X.shape[0]).shape)
+        I = I + self.conv_h_i(H, edge_index, edge_weight, lambda_max=lambda_max,batch=H.shape[0])
+        I = I + (self.w_c_i * C)
+        I = I + self.b_i
+        I = torch.sigmoid(I)
+        return I
+
+    def _calculate_forget_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        F = self.conv_x_f(X, edge_index, edge_weight, lambda_max=lambda_max,batch=X.shape[0])
+        F = F + self.conv_h_f(H, edge_index, edge_weight, lambda_max=lambda_max,batch=H.shape[0])
+        F = F + (self.w_c_f * C)
+        F = F + self.b_f
+        F = torch.sigmoid(F)
+        return F
+
+    def _calculate_cell_state(self, X, edge_index, edge_weight, H, C, I, F, lambda_max):
+        T = self.conv_x_c(X, edge_index, edge_weight, lambda_max=lambda_max,batch=X.shape[0])
+        T = T + self.conv_h_c(H, edge_index, edge_weight, lambda_max=lambda_max,batch=H.shape[0])
+        T = T + self.b_c 
+        T = torch.tanh(T)
+        C = F * C + I * T
+        return C
+
+    def _calculate_output_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        O = self.conv_x_o(X, edge_index, edge_weight, lambda_max=lambda_max, batch=X.shape[0])
+        O = O + self.conv_h_o(H, edge_index, edge_weight, lambda_max=lambda_max, batch=H.shape[0])
+        O = O + (self.w_c_o * C)
+        O = O + self.b_o    
+        O = torch.sigmoid(O)
+        return O
+
+    def _calculate_hidden_state(self, O, C):
+        H = O * torch.tanh(C)
+        return H
+        
+
+    def forward(self, input, edge_index, edge_weight, hx=None, lambda_max=None):
+
+        # Inputs:
+        #       input: of shape (batch_size, nodes, input_size)
+        #       hx: of shape (2, batch_size, nodes, hidden_size)
+        # Outputs:
+        #       hy: of shape (batch_size, nodes, hidden_size)
+        #       cy: of shape (batch_size, nodes, hidden_size)
+
+        if hx is None:
+            hx = Variable(input.new_zeros(input.size(0), self.n_nodes, self.hidden_channels))
+            hx = (hx, hx)
+        hx, cx = hx
+
+        #H = self._set_hidden_state(input, H)
+        #C = self._set_cell_state(input, C)
+        I = self._calculate_input_gate(input, edge_index, edge_weight, hx, cx, lambda_max)
+        F = self._calculate_forget_gate(input, edge_index, edge_weight, hx, cx, lambda_max)
+        C = self._calculate_cell_state(input, edge_index, edge_weight, hx, cx, I, F, lambda_max)
+        O = self._calculate_output_gate(input, edge_index, edge_weight, hx, cx, lambda_max)
+        H = self._calculate_hidden_state(O, C)
+
+        return (H,C)
+
+
+class GCN(torch.nn.Module):
+    def __init__(self, input_size, embedding_size, hidden_size, kernel_size, num_layers):
+        super().__init__()
+
+        self.input_size = input_size[0]
+        self.nodes = input_size[1]
+        self.embedding_size = embedding_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.kernel_size = kernel_size
+
+        self.gcn_cell_list = nn.ModuleList([GConvLSTMCell((self.embedding_size,self.nodes),
+                                            self.hidden_size,
+                                            self.kernel_size) for _ in range(self.num_layers)])
+
+        self.linear = torch.nn.Linear(hidden_size, 1)
+
+        self.intermediate_size = 8
+
+        self.nn_model = nn.ModuleList([nn.Sequential(
+            nn.Linear(self.intermediate_size, 256, bias=True),
+            #nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, self.embedding_size),
+            #nn.BatchNorm1d(self.intermediate_size)
+        ) for _ in range(self.nodes)])
+
+        self.nn_model2 = nn.Sequential(
+            #nn.Linear(self.intermediate_size, 256, bias=True),
+            nn.Linear(self.input_size, 256, bias=True),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, 256, bias=True),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, self.intermediate_size),
+            nn.BatchNorm1d(self.intermediate_size)
+        )
+
+    def forward(self, input, e_i, e_a, hx = None):
+        #input, edge_index, edge_attr = data["data"], data["edge_index"], data["edge_attr"]
+
+        e_a = e_a[0]
+        e_i = e_i[0]
+        e_i = e_i.movedim(-2,-1)
+        #e_a = e_a.movedim(-2,-1)
+
+
+        batch_size = input.size(0)
+        sentence_length = input.size(1)
+
+        inputDeep = input.movedim(-2,-1)
+
+        inputDeep = inputDeep.reshape((batch_size*sentence_length*self.nodes, self.input_size))
+        inputDeep = (self.nn_model2(inputDeep)).reshape((batch_size, sentence_length, self.nodes, self.intermediate_size))
+
+        embedded1 = [inputDeep[:,:,i,:] for i in range(self.nodes)]
+        embedded = torch.Tensor(batch_size, sentence_length, 1, self.embedding_size)
+        for i in range(self.nodes):
+            embedded1[i] = (self.nn_model[i](embedded1[i].reshape((batch_size*sentence_length, self.intermediate_size))))
+            embedded1[i] = embedded1[i].reshape((batch_size, sentence_length, 1, self.embedding_size))
+            if (i == 0):
+                embedded = embedded1[i]
+            else:
+                embedded = torch.cat((embedded, embedded1[i]), dim=2)
+
+        #embedded shape == (batch,sentence,nodes,features(emb))
+
+        #embedded = embedded.movedim(-2,-4)
+
+        if hx is None:
+            if torch.cuda.is_available():
+                h0 = Variable(torch.zeros(self.num_layers, batch_size, self.nodes, self.hidden_size).cuda())
+            else:
+                h0 = Variable(torch.zeros(self.num_layers, batch_size, self.nodes, self.hidden_size))
+        else:
+            h0 = hx
+
+        hidden = list()
+        for layer in range(self.num_layers):
+            hidden.append((h0[layer], h0[layer]))
+
+        result_tensor = torch.Tensor(batch_size, 1, self.nodes)
+        
+        for t in range(sentence_length):
+
+            for layer in range(self.num_layers):
+
+                if layer == 0:
+                    hidden_l = self.gcn_cell_list[layer](
+                        embedded[:, t, :, :],
+                        e_i, e_a,
+                        (hidden[layer][0],hidden[layer][1])
+                        )
+                else:
+                    hidden_l = self.gcn_cell_list[layer](
+                        hidden[layer - 1][0],
+                        e_i, e_a,
+                        (hidden[layer][0], hidden[layer][1])
+                        )
+
+                hidden[layer] = hidden_l
+
+            #print(hidden_l[0].shape)
+            #newTensor = self.conv1(hidden_l[0])
+            newTensor = self.linear(hidden_l[0].reshape((batch_size*self.nodes, self.hidden_size))).reshape((batch_size, self.nodes))
+            #print (newTensor.shape)
+            newTensorI = newTensor.squeeze().unsqueeze(1)
+            if (t == 0):
+                result_tensor = newTensorI
+            else:
+                result_tensor = torch.cat((result_tensor, newTensorI), dim=1)
+            #print(hidden_l[0].shape,newTensor.shape, result_tensor.shape)
+
+        #print(e_i.shape)
+        #print(e_a.shape)
+        #print(embedded.shape)
+        #h = self.gnn(embedded, edge_index=e_i, edge_weight=e_a)[0]
+        #h = F.leaky_relu(h)
+        #print(h.shape)
+        #h = self.linear(h)
+
+        #h = torch_geometric.nn.global_mean_pool(h, batch)
+        #h = self.classifier(h)
+        return result_tensor
 
 
 

@@ -28,8 +28,8 @@ MainController::MainController() {
     controllerBase = new ControllerBase(triggerManager, epicsManager, neuralNetwork, serverData); 
 
     //epicsManager->makeTableWithEpicsData("new", 444140006, 1e9);
-    epicsManager->makeTableWithEpicsData("app", 443876957, 445533980);
-    //neuralNetwork->remakeInputDataset();
+    //epicsManager->makeTableWithEpicsData("app", 444244740, 445533980);
+    neuralNetwork->remakeInputDataset();
     //neuralNetwork->retrainModel();
     //controllerBase->compareTargetPredictionFromTraining();
 

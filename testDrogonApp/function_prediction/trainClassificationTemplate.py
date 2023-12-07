@@ -19,8 +19,8 @@ from pympler import asizeof
 from models.model import DNN
 from models.model import LSTM
 from models.model import Conv2dLSTM
-from models.model import Conv2dLSTMCell
-from dataHandling import My_dataset, DataManager, load_dataset
+from models.model import GCN
+from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset
 
 
 """
@@ -32,6 +32,8 @@ If new model is being added:
 5) change config.py
 """
 
+mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
+dataManager = DataManager(mainPath)
 
 
 class EarlyStopper:
@@ -67,10 +69,15 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
         loss_train = 0
         accuracy_train = 0
         isteps = 0
+        #train_iter = iter(train_loader)
         #tepoch = tqdm(train_loader,unit=" batch")
-        for i_step, (x, y) in enumerate(train_loader):
-            #tepoch.set_description(f"Epoch {epoch}")
-            prediction = model(x)
+        for i_step, (x, y, e_i, e_a) in enumerate(train_loader):
+        #i_step_count = 0
+        #for i_step in tepoch:
+        #    i_step_count+=1
+        #    tepoch.set_description(f"Epoch {epoch}")
+        #    (x,y,e_i,e_a) = next(train_iter)
+            prediction = model(x,e_i,e_a)
             #print(*prediction[0][14])
             #print(*y[0][14])
 
@@ -93,7 +100,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
 
             loss_history.append(float(running_loss))
 
-            #tepoch.set_postfix(loss=float(running_loss), accuracy=float(running_acc)*100)
+        #    tepoch.set_postfix(loss=float(running_loss), accuracy=float(running_acc)*100)
 
         accuracy_train = accuracy_train/isteps
         loss_train = loss_train/isteps
@@ -105,8 +112,8 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
         validLosses = []
         validAccuracies = []
         with torch.no_grad():
-            for v_step, (x, y) in enumerate(valid_loader):
-                prediction = model(x)
+            for v_step, (x, y, e_i, e_a)  in enumerate(valid_loader):
+                prediction = model(x,e_i,e_a)
                 validLosses.append(float(loss(prediction, y)))
 
                 fullYAmount = y.shape[0]
@@ -148,7 +155,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
     
     return accuracy_valid
 
-def train_NN(mainPath, simulation_path="simu1.parquet"):
+def train_NN(mainPath, simulation_path="simu.parquet"):
     from config import Config
     config = Config()
     print("start nn training")
@@ -165,14 +172,20 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
         nLayers = 3
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
+        fullset = dataManager.normalizeDataset(fullset)
         fullset.drop(list(fullset.columns)[0],axis=1,inplace=True)
         dftCorr = fullset.sample(frac=1.0).reset_index(drop=True) # shuffling
         dataTable = dftCorr.sample(frac=0.8).sort_index()
         validTable = dftCorr.drop(dataTable.index)
 
+        print(dataTable)
+
         
         train_dataset = My_dataset(load_dataset(config, dataTable))
         valid_dataset = My_dataset(load_dataset(config, validTable))
+        if (config.modelType == "gConvLSTM"):
+            train_dataset = Graph_dataset(load_dataset(config, dataTable))
+            valid_dataset = Graph_dataset(load_dataset(config, validTable))
 
         dropLastT = False
         if (dataTable.shape[0]%batch_size==1):
@@ -193,6 +206,8 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
             nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
         elif (config.modelType == "ConvLSTM"):
             nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1) #16 16
+        elif (config.modelType == "gConvLSTM"):
+            nn_model = GCN(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1)
 
         loss = nn.MSELoss()
 
@@ -218,6 +233,8 @@ def train_NN(mainPath, simulation_path="simu1.parquet"):
             modelRandInput = torch.randn(1, input_dim[0], input_dim[-1])
         elif (config.modelType == "ConvLSTM"):
             modelRandInput = torch.randn(1, input_dim[0], input_dim[-3], input_dim[-2], input_dim[-1])
+        elif (config.modelType == "gConvLSTM"):
+            modelRandInput = (torch.randn(1, input_dim[0], input_dim[-2], input_dim[-1]),torch.randint(0,input_dim[-1]-1,(1,2,train_dataset[2][0].shape[0])),torch.ones(1,train_dataset[2][0].shape[0]))
         torch.onnx.export(nn_model,                                # model being run
                   modelRandInput,    # model input (or a tuple for multiple inputs)
                   mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)
@@ -243,10 +260,7 @@ def varyHyperparameters():
 
 print("start_train_python")
 
-mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
-
-dataManager = DataManager()
-dataManager.manageDataset("train_nn",mainPath)
+dataManager.manageDataset("train_nn")
 
 
 train_NN(mainPath)
