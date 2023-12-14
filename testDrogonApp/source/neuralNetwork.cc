@@ -612,6 +612,17 @@ vector<float> NeuralNetwork::formNNInput(vector<double> db, vector<double> tr){
     return nnInpPars;
 }
 
+vector<float> NeuralNetwork::formNNInput(vector<double> db){
+
+    vector<float> nnInpPars;
+    for (size_t i = 0; i < db.size(); i++){
+        double x = db[i];
+        if (std::find(additionalFilter.begin(), additionalFilter.end(), i) == additionalFilter.end())
+            nnInpPars.push_back((float)x);
+    }
+    return nnInpPars;
+}
+
 void NeuralNetwork::retrainModel(){
     gSystem->Exec("python3 /home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/function_prediction/trainClassificationTemplate.py");
     gSystem->Exec("python3 /home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/function_prediction/predict.py");

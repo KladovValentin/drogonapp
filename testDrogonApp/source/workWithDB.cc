@@ -6,6 +6,7 @@
 using namespace std;
 
 using namespace dateRunF;
+namespace fs = std::filesystem;
 
 EpicsDBManager::EpicsDBManager(int port){
     channel_names = {""};
@@ -239,6 +240,41 @@ vector<double> EpicsDBManager::getDBdata(int run, int runnext){
 }
 
 
+void EpicsDBManager::appendDBTable(string mode, int runl, vector<double> dbPars){
+
+    std::ofstream fout;
+    string saveFileStr = ((string)(saveLocation+"info_tables/MDCModSec1.dat"));
+    const char* saveFile = saveFileStr.c_str();
+    if (mode == "new") {
+        // move previous table to the available history file
+        bool fileExists = true; int countHist = 0;
+        string historyFileStr;
+        while (fileExists){
+            countHist+=1;
+            historyFileStr = ((string)(saveLocation+"info_tables/MDCModSec1Hist" + std::to_string(countHist) + ".dat"));
+            const char* historyFileT = historyFileStr.c_str();
+            fileExists = fs::exists(historyFileT);
+        }
+        const char* historyFile = historyFileStr.c_str();
+        std::rename(saveFile, historyFile);
+        
+        // actually open the new file
+        fout.open(saveFile);
+    }
+    else if (mode == "app") 
+        fout.open(saveFile, std::ios_base::app);
+    
+    
+    if (dbPars.size() > 0){
+        fout << runl << "  ";
+        for (size_t j = 0; j < dbPars.size(); j++){
+            fout << dbPars[j] << "  ";
+        } 
+        fout << endl;
+    }
+    fout.close();
+}
+
 void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
     vector<int> runBorders = loadrunlist(runl, runr); //444140006
     cout << runBorders.size() << "  " << runBorders[0] << endl;
@@ -249,8 +285,22 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
     string saveFileStr = ((string)(saveLocation+"info_tables/MDCModSec1.dat"));
     const char* saveFile = saveFileStr.c_str();
     cout << "saving epics data to '" << saveFile << "' with mode " << mode << endl;
-    if (mode == "new") 
+    if (mode == "new") {
+        // move previous table to the available history file
+        bool fileExists = true; int countHist = 0;
+        string historyFileStr;
+        while (fileExists){
+            countHist+=1;
+            historyFileStr = ((string)(saveLocation+"info_tables/MDCModSec1Hist" + std::to_string(countHist) + ".dat"));
+            const char* historyFileT = historyFileStr.c_str();
+            fileExists = fs::exists(historyFileT);
+        }
+        const char* historyFile = historyFileStr.c_str();
+        std::rename(saveFile, historyFile);
+        
+        // actually open the new file
         fout.open(saveFile);
+    }
     else if (mode == "app") 
         fout.open(saveFile, std::ios_base::app);
     

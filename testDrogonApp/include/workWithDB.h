@@ -10,6 +10,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <filesystem>
 
 #include "TString.h"
 #include "TGraph.h"
@@ -55,6 +56,7 @@ class EpicsDBManager {
         vector<double> getDBdata(int run, int runnext);
         vector<double> getDBdata(string date1, string date2);
 
+        void appendDBTable(string mode, int runl, vector<double> dbPars);
         void makeTableWithEpicsData(string mode, int runl, int runr);
 };
 

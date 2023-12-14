@@ -16,6 +16,8 @@ ControllerBase::ControllerBase(TriggerDataManager* itriggerManager, EpicsDBManag
     epicsManager = iepicsManager;
     neuralNetwork = ineuralNetwork;
     serverData = iserverData;
+    
+    sentenceLength = 15;
 
     out = new TFile("outHome.root","RECREATE");
     out->cd();
@@ -190,6 +192,8 @@ void ControllerBase::compareTargetPredictionFromTraining(){
 
 vector<float> ControllerBase::makeNNInputTensor(int run){
     vector< vector<float> > tempInpInversed;
+    vector< vector<double> > tempDBInversed;
+    vector<int> runsDBind;
     vector<float> nnInpTens;
 
     vector<int> runBorders = loadrunlist(0, 1e10);
@@ -201,21 +205,34 @@ vector<float> ControllerBase::makeNNInputTensor(int run){
     int index = std::distance(runBorders.begin(), p);
 
     int nBack = 0;
-    while (tempInpInversed.size() < 15){
+    while (tempInpInversed.size() < sentenceLength){
         size_t j = (index-nBack) < 0 ? 0 : (size_t)(index-nBack);
         nBack+=1;
-        vector <double> trPars = triggerManager->getTriggerData(runBorders[j])[0];
-        if (trPars.size()<1)
-            continue;
+        //vector <double> trPars = triggerManager->getTriggerData(runBorders[j])[0];
+        //if (trPars.size()<1)
+        //    continue;
 
-        vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(runBorders[j], runBorders[j+1]), trPars);
-        tempInpInversed.push_back(nnInpPars);
-
+        //vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(runBorders[j], runBorders[j+1]), trPars);
+        //vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(runBorders[j], runBorders[j+1]));
+        //tempInpInversed.push_back(nnInpPars);
+        tempDBInversed.push_back(epicsManager->getDBdata(runBorders[j], runBorders[j+1]));
+        runsDBind.push_back(j);
     }
 
-    for (int i = 14; i >= 0; i--){
-        for (float x: tempInpInversed[i]){
+    bool firstRunDataWritten = false;
+    for (int i = sentenceLength-1; i >= 0; i--){
+        vector<float> nnInpPars = neuralNetwork->formNNInput(tempDBInversed[i]);
+        //for (float x: tempInpInversed[i]){
+        for (float x: nnInpPars){
             nnInpTens.push_back(x);
+        }
+
+        if (runsDBind[i] != 0)
+            EpicsDBManager::appendDBTable("app", runBorders[runsDBind[i]], tempDBInversed[i]);
+        else{
+            if (!firstRunDataWritten)
+                EpicsDBManager::appendDBTable("app", runBorders[runsDBind[i]], tempDBInversed[i]);
+            firstRunDataWritten = true;
         }
     }
     return nnInpTens;
@@ -240,9 +257,9 @@ float ControllerBase::moveForwardCurrentNNInput(){
     long long elapsed3 = 0;
     long long elapsed4 = 0;
     long long elapsed5 = 0;
-    if (currentNNInput.size() < 10){
+    if (currentNNInput.size() < sentenceLength){
         currentNNInput = makeNNInputTensor(currentRun);
-        if (currentNNInput.size() < 10)
+        if (currentNNInput.size() < sentenceLength)
             return -3;
     }
     else{
@@ -252,15 +269,18 @@ float ControllerBase::moveForwardCurrentNNInput(){
         currentRunIndex = currentRunIndex+1;
         currentRun = nextRun;
         nextRun = nextNextRun;
-        vector <double> trPars = triggerManager->getTriggerData(currentRun)[0];
-        if (trPars.size() <= 1){
-            serverData->setCurrentRunIndex(currentRunIndex);
-            return -2;
-        }
+        //vector <double> trPars = triggerManager->getTriggerData(currentRun)[0];
+        //if (trPars.size() <= 1){
+        //    serverData->setCurrentRunIndex(currentRunIndex);
+        //    return -2;
+        //}
         
         elapsed4 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
 
-        vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(currentRun, nextRun), trPars);
+        //vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(currentRun, nextRun), trPars);
+        vector<double> dbData = epicsManager->getDBdata(currentRun, nextRun);
+        EpicsDBManager::appendDBTable("app", currentRun, dbData);
+        vector<float> nnInpPars = neuralNetwork->formNNInput(dbData);
         currentNNInput.erase(currentNNInput.begin(), currentNNInput.begin() + nnInpPars.size());
         for (size_t i = 0; i < nnInpPars.size(); i++){
             currentNNInput.push_back(nnInpPars[i]);
@@ -287,6 +307,7 @@ float ControllerBase::moveForwardCurrentNNInput(){
 }
 
 
+// Old, not used
 void ControllerBase::drawManyPredictions(){
     TGraph* gr = new TGraph();
 

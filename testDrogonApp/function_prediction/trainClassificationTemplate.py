@@ -165,10 +165,17 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
     for i in range(1):
         batch_size, lr, nNeurons, nLayers, weight_decay = varyHyperparameters()
         print(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay))
+
+        transferTraining = True
         
         batch_size = 512 #512
         weight_decay = 0.03
         lr = 0.01
+        epochs = 100
+        if (transferTraining):
+            lr = 0.001
+            epochs = 20
+            weight_decay = 0.04
         nLayers = 3
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
@@ -209,6 +216,10 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
         elif (config.modelType == "gConvLSTM"):
             nn_model = GCN(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1)
 
+        if (transferTraining):
+            nn_model.load_state_dict(torch.load(mainPath+"function_prediction/tempModel.pt"))
+            nn_model.train() 
+
         loss = nn.MSELoss()
 
         #optimizer = optim.SGD(nn_model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.05)
@@ -218,14 +229,14 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
         #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
 
         print("prepared to train nn")
-        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, 1, valid_loader, scheduler = scheduler)
+        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, epochs, valid_loader, scheduler = scheduler)
 
         print("trained nn, valid acc = " + str(loc_acc))
 
         f.write(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay) + " " + str(100*loc_acc) + "\n")
 
         nn_model.eval()
-        torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModel.pt")
+        torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModelNew.pt")
 
         if (config.modelType == "DNN"):
             modelRandInput = torch.randn(1, input_dim[-1])

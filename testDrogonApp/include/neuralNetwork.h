@@ -61,6 +61,7 @@ class NeuralNetwork {
         void retrainModel();
 
         vector<float> formNNInput(vector<double> db, vector<double> tr);
+        vector<float> formNNInput(vector<double> db);
 };
 
 

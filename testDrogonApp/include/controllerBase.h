@@ -22,6 +22,7 @@ class ControllerBase {
         ServerData* serverData;
 
         vector<float> runningNnInpTens;
+        int sentenceLength;
 
         TFile* out ;  // pointer to outputfile
         TH1F* hTriggerDataTime;

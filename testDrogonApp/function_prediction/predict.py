@@ -36,7 +36,7 @@ def loadModel(config, input_dim, nClasses, path):
     elif (config.modelType == "gConvLSTM"):
         nn_model = GCN(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1)
     nn_model.type(torch.FloatTensor)
-    nn_model.load_state_dict(torch.load(path+"tempModel.pt"))
+    nn_model.load_state_dict(torch.load(path+"tempModelNew.pt"))
     return nn_model
 
 def constructPredictionFrame(index,nparray):

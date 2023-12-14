@@ -36,18 +36,38 @@ class Graph_dataset(Dataset):
         return torch.tensor(self.datasetX[index]), torch.tensor(self.datasetY[index]), torch.LongTensor(self.edge_index), torch.Tensor(self.edge_attr)
 
 
+def make_graph(config):
+    cellsLength = config.cellsLength
+    e_ind2 = []
+    for i in range(cellsLength):
+        rightLink, topLink = 0,0
+
+        if (i/6 == (i+1)/6):
+            rightLink = i+1
+        elif (i/6 + 1 == (i+1)/6):
+            rightLink = i-5
+
+        topLink = i + 6
+
+        if (i == cellsLength):
+            rightLink = i-5
+
+        e_ind2.append([i,rightLink])
+        if (topLink < cellsLength and int(topLink)/6 != 2):
+            e_ind2.append([i,topLink])
+    e_ind2 = np.array(e_ind2)
+    e_att2 = np.ones((len(e_ind2),))
+    
+    return e_ind2, e_att2
+
+
 def load_dataset(config, dataTable):
     # transform to numpy, assign types, split on features-labels
-    sentenceLength = 15
-    cellsLength = 24
-    channelsLength = 7
+    sentenceLength = config.sentenceLength
+    cellsLength = config.cellsLength
+    channelsLength = config.channelsLength
     df = dataTable
     dfn = df.to_numpy()
-    #print(dfn)
-
-    e_ind = np.zeros((cellsLength,cellsLength))
-    e_att = np.ones((cellsLength,cellsLength)).astype(np.float32)
-
 
     if (config.modelType == "LSTM"):
         x = []
@@ -152,45 +172,11 @@ def load_dataset(config, dataTable):
         x = (np.array(x).astype(np.float32))
         y = np.array(y).astype(np.float32)
 
-        e_ind2 = []
-        for i in range(cellsLength):
-            leftLink, rightLink, botLink, topLink = 0,0,0,0
+        e_ind2, e_att2 = make_graph(config)
 
-            if (i/6 == (i+1)/6):
-                rightLink = i+1
-            elif (i/6 + 1 == (i+1)/6):
-                rightLink = i-5
-            
-            if (i/6 == (i-1)/6):
-                leftLink = i-1
-            elif (i/6 - 1 == (i-1)/6):
-                leftLink = i+5
-
-            botLink = i - 6
-            topLink = i + 6
-
-            if (i == 0):
-                leftLink = i+5
-            if (i == cellsLength):
-                rightLink = i-5
-
-
-            e_ind[i][leftLink] = 1
-            e_ind[i][rightLink] = 1
-            if (botLink >= 0):
-                e_ind[i][botLink] = 1
-            if (topLink < cellsLength):
-                e_ind[i][topLink] = 1
-
-            e_ind2.append([i,rightLink])
-            if (topLink < cellsLength and int(topLink)/6 != 2):
-                e_ind2.append([i,topLink])
-        e_ind2 = np.array(e_ind2)
-        e_att2 = np.ones((len(e_ind2),))
+        # extend to the events length size, to forward it to data loader
         np.tile(e_ind2, (len(y), 1, 1))
         np.tile(e_att2, (len(y), 1, 1))
-        np.tile(e_ind, (len(y), 1, 1))
-        np.tile(e_att, (len(y), 1, 1))
             
 
     elif (config.modelType == "DNN"):
@@ -202,10 +188,10 @@ def load_dataset(config, dataTable):
     print('x shape = ' + str(x.shape))
     print('y shape = ' + str(y.shape))
     if (config.modelType == "gConvLSTM"):
-        #print(e_ind)
+        print('e_ind shape = ' + str(e_ind2.shape))
+        print('e_att shape = ' + str(e_att2.shape))
         return (x, y, e_ind2, e_att2)
     return (x, y)
-
 
 
 class DataManager():

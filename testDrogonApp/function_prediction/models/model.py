@@ -277,7 +277,12 @@ class GCN(torch.nn.Module):
         )
 
     def forward(self, input, e_i, e_a, hx = None):
-        #input, edge_index, edge_attr = data["data"], data["edge_index"], data["edge_attr"]
+        # Shapes:
+        #   in:  (batch, sentence, nodes, features(inp))
+        #   e_i: (batch, nodes, 2)
+        #   e_a: (batch, nodes, 2)
+        #   out: (batch, sentence, nodes)
+        #   emb: (batch, sentence, nodes, features(emb))
 
         e_a = e_a[0]
         e_i = e_i[0]
@@ -287,12 +292,13 @@ class GCN(torch.nn.Module):
 
         batch_size = input.size(0)
         sentence_length = input.size(1)
-
         inputDeep = input.movedim(-2,-1)
 
+        # Big FC with the same coefficients for all nodes to get general dependencies
         inputDeep = inputDeep.reshape((batch_size*sentence_length*self.nodes, self.input_size))
         inputDeep = (self.nn_model2(inputDeep)).reshape((batch_size, sentence_length, self.nodes, self.intermediate_size))
 
+        # Small FCs for each node to account for the differences in nodes
         embedded1 = [inputDeep[:,:,i,:] for i in range(self.nodes)]
         embedded = torch.zeros(batch_size, sentence_length, 1, self.embedding_size)
         for i in range(self.nodes):
@@ -303,10 +309,6 @@ class GCN(torch.nn.Module):
             else:
                 embedded = torch.cat((embedded, embedded1[i]), dim=2)
 
-        #embedded shape == (batch,sentence,nodes,features(emb))
-
-        #embedded = embedded.movedim(-2,-4)
-
         if hx is None:
             if torch.cuda.is_available():
                 h0 = Variable(torch.zeros(self.num_layers, batch_size, self.nodes, self.hidden_size).cuda())
@@ -314,13 +316,12 @@ class GCN(torch.nn.Module):
                 h0 = Variable(torch.zeros(self.num_layers, batch_size, self.nodes, self.hidden_size))
         else:
             h0 = hx
-
         hidden = list()
         for layer in range(self.num_layers):
             hidden.append((h0[layer], h0[layer]))
-
         result_tensor = torch.zeros(batch_size, 1, self.nodes)
-        
+
+        # LSTM + GCN going "column-by-column" through the sentence
         for t in range(sentence_length):
 
             for layer in range(self.num_layers):
@@ -341,7 +342,6 @@ class GCN(torch.nn.Module):
                 hidden[layer] = hidden_l
 
             #print(hidden_l[0].shape)
-            #newTensor = self.conv1(hidden_l[0])
             newTensor = self.linear(hidden_l[0].reshape((batch_size*self.nodes, self.hidden_size))).reshape((batch_size, self.nodes))
             #print (newTensor.shape)
             newTensorI = newTensor.squeeze().unsqueeze(1)
@@ -354,13 +354,8 @@ class GCN(torch.nn.Module):
         #print(e_i.shape)
         #print(e_a.shape)
         #print(embedded.shape)
-        #h = self.gnn(embedded, edge_index=e_i, edge_weight=e_a)[0]
-        #h = F.leaky_relu(h)
         #print(h.shape)
-        #h = self.linear(h)
 
-        #h = torch_geometric.nn.global_mean_pool(h, batch)
-        #h = self.classifier(h)
         return result_tensor
 
 
