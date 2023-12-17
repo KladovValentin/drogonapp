@@ -228,10 +228,10 @@ vector<float> ControllerBase::makeNNInputTensor(int run){
         }
 
         if (runsDBind[i] != 0)
-            EpicsDBManager::appendDBTable("app", runBorders[runsDBind[i]], tempDBInversed[i]);
+            epicsManager->appendDBTable("app", runBorders[runsDBind[i]], tempDBInversed[i]);
         else{
             if (!firstRunDataWritten)
-                EpicsDBManager::appendDBTable("app", runBorders[runsDBind[i]], tempDBInversed[i]);
+                epicsManager->appendDBTable("app", runBorders[runsDBind[i]], tempDBInversed[i]);
             firstRunDataWritten = true;
         }
     }
@@ -279,7 +279,7 @@ float ControllerBase::moveForwardCurrentNNInput(){
 
         //vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(currentRun, nextRun), trPars);
         vector<double> dbData = epicsManager->getDBdata(currentRun, nextRun);
-        EpicsDBManager::appendDBTable("app", currentRun, dbData);
+        epicsManager->appendDBTable("app", currentRun, dbData);
         vector<float> nnInpPars = neuralNetwork->formNNInput(dbData);
         currentNNInput.erase(currentNNInput.begin(), currentNNInput.begin() + nnInpPars.size());
         for (size_t i = 0; i < nnInpPars.size(); i++){

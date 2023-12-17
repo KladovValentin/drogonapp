@@ -29,13 +29,20 @@ MainController::MainController() {
 
     //epicsManager->makeTableWithEpicsData("new", 444140006, 1e9);
     //epicsManager->makeTableWithEpicsData("app", 444244740, 445533980);
-    epicsManager->makeTableWithEpicsData("new", 444244740, 444246000);
+    //epicsManager->makeTableWithEpicsData("new", 444244740, 444246000);
     //neuralNetwork->remakeInputDataset();
     //neuralNetwork->retrainModel();
     //controllerBase->compareTargetPredictionFromTraining();
 
     //serverData->readSettingsJSON();
     //serverData->writeSettingsJSON();
+
+    //std::string launchScript = (string)("cd /lustre/hades/user/vkladov/sub/testBatchFarm;") +
+    //                            (string)(" . ./sendScript_raw_SL.sh 45");
+    //std::system("g++ -o fetchNewCalibrations fetchNewCalibrations.cc");
+    std::system("nohup ~/gsiWorkFiles/fetchMDCcalibrations/fetchNewCalibrations > ~/output.log 2>&1 &");
+
+    cout << "sent commands, can work here further" << endl;
 
 }
 
