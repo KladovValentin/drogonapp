@@ -17,6 +17,7 @@ vector<string> stringFunctions::tokenize(string str, const char *delim){
 
 
 vector<double> vectorFunctions::runningMeanVector(vector<double> vect, int avRange){
+    /// Calculates running mean of a vector, centered at the entry, iteratively skips too off values
 
     double maxdiff = *max_element(vect.begin(), vect.end()) - *min_element(vect.begin(), vect.end());
     TH1 *hStep = new TH1F("hStep",";diff;counts",30,-maxdiff,maxdiff);
@@ -117,6 +118,8 @@ vector<double> vectorFunctions::runningMeanVector(vector<double> vect, int avRan
 }
 
 vector<double> vectorFunctions::normalizeVectorNN(vector<double> vect){
+    /// Normalizes to "normal" distribution, with 0 average and 1 std
+
     double mean0 = 0, std0 = 0;
     for (double x : vect) {
         mean0 += x;
@@ -146,6 +149,7 @@ vector<double> vectorFunctions::normalizeVectorNN(vector<double> vect){
     return vect;
 }
 double vectorFunctions::normalizeVector(vector<double>& vect){
+    /// Normalizes to average 1 
     double mean = 0;
     for (size_t i = 0; i < vect.size(); i++)
         mean += vect[i];
@@ -155,10 +159,50 @@ double vectorFunctions::normalizeVector(vector<double>& vect){
     return mean;
 }
 
+vector<float> vectorFunctions::transposeTensorDimensions(vector<float> inputTensor, vector<long int> dims, vector<size_t> permutation){
+    size_t numElements = 1;
+    for (size_t dim : dims) {
+        numElements *= dim;
+    }
+    std::vector<float> transposedTensor(numElements);
+
+    // Perform the transpose operation
+    for (size_t i = 0; i < numElements; ++i) {
+        // Convert the flat index to multi-dimensional indices
+        size_t flatIndex = i;
+        std::vector<size_t> indices(dims.size());
+        for (size_t j = 0; j < dims.size(); ++j) {
+            indices[j] = flatIndex % (size_t)dims[j];
+            flatIndex /= (size_t)dims[j];
+        }
+
+        // Permute the indices according to the given permutation vector
+        std::vector<size_t> transposedIndices(dims.size());
+        for (size_t j = 0; j < dims.size(); ++j) {
+            transposedIndices[j] = indices[permutation[j]];
+        }
+
+        // Convert the transposed indices back to a flat index for the transposed tensor
+        size_t transposedFlatIndex = 0;
+        size_t factor = 1;
+        for (size_t j = 0; j < dims.size(); ++j) {
+            transposedFlatIndex += transposedIndices[j] * factor;
+            factor *= dims[j];
+        }
+
+        // Copy the value from the original tensor to the transposed tensor
+        transposedTensor[i] = inputTensor[transposedFlatIndex];
+    }
+
+    // Copy the transposed tensor back to the original tensor
+    return transposedTensor;
+}
 
 
 
 double dateRunF::dateToNumber(string date){
+    /// Date format with "-" to Root's time axis format. Simplifications are from ROOT itself
+
     vector<string> tokens = stringFunctions::tokenize(date, "[-]");
     vector<double> segments;
     for (size_t i = 0; i < tokens.size(); i++)
@@ -168,61 +212,170 @@ double dateRunF::dateToNumber(string date){
 }
 
 string dateRunF::runToDate(int run){
-    int day = (((int)(run-443670000)/86400) - 28*(((int)(run-443670000)/86400)/28) + 1);
-    int month = day/29+2;
+    /// Transforms run number to the date. Corrects for 29 days in Feb, for diff in months length
+
+    int day = (((int)(run-443670000)/86400)+31);
+    int year = 2022 + (int)day/365;
+    int visoyears = (int)(year-2021)/4;
+    day = day - 365*(year-2022) - visoyears;
+    bool isVisoyear = false;
+    if (day<0){
+        year = year-1;
+        if ((int)(year-2021)/4 == visoyears){
+            /// we are currently on visoyear
+            isVisoyear = true;
+            day = day+366;
+        }
+        else{
+            day = day+365;
+        }
+    }
+
+    vector<int> months = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (isVisoyear)
+        months = {31,29,31,30,31,30,31,31,30,31,30,31};
+    int month = 0; int daysLeft = day; int daysLeftPrev = 0;
+    while (daysLeft >= 0){
+        daysLeftPrev = daysLeft;
+        daysLeft -= months[month];
+        month += 1; /// In any case resulting month will be >=1, (Jan=01)
+    }
+
+    day = daysLeftPrev;
+    day = day+1; /// we say "the first of april, not 0th".
+
     int runMDay = (run-443670000)%86400;
     int hour = (int)(runMDay/3600);
     int minute = (runMDay%3600)/60;
     int second = (runMDay%3600)%60;
+    
+    string daystr = day < 10 ? "0"+to_string(day) : to_string(day);
+    string monthstr = month < 10 ? "0"+to_string(month) : to_string(month);
     string hourstr = hour<10 ? "0"+to_string(hour) : to_string(hour);
     string minutestr = minute<10 ? "0"+to_string(minute) : to_string(minute);
     string secondstr = second<10 ? "0"+to_string(second) : to_string(second);
-    string monthstr = month<10 ? "0"+to_string(month) : to_string(month);
-    string daystr = day<10 ? "0"+to_string(day) : to_string(day);
-    string date = "2022-" + monthstr + "-" + daystr + " " + hourstr + ":" + minutestr + ":" + secondstr;
+
+    string date = to_string(year) + "-" + monthstr + "-" + daystr +" "+hourstr+":"+minutestr+":"+secondstr;
     return date;
 }
 
 double dateRunF::runToDateNumber(int run){
-    int day = ((int)(run-443670000)/86400 + 1);
+    
+    /// Transforms run number to the date. Corrects for 29 days in Feb, for diff in months length
+
+    int day = (((int)(run-443670000)/86400)+31);
+    int year = 2022 + (int)day/365;
+    int visoyears = (int)(year-2021)/4;
+    day = day - 365*(year-2022) - visoyears;
+    bool isVisoyear = false;
+    if (day<0){
+        year = year-1;
+        if ((int)(year-2021)/4 == visoyears){
+            /// we are currently on visoyear
+            isVisoyear = true;
+            day = day+366;
+        }
+        else{
+            day = day+365;
+        }
+    }
+
+    vector<int> months = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (isVisoyear)
+        months = {31,29,31,30,31,30,31,31,30,31,30,31};
+    int month = 0; int daysLeft = day; int daysLeftPrev = 0;
+    while (daysLeft >= 0){
+        daysLeftPrev = daysLeft;
+        daysLeft -= months[month];
+        month += 1; /// In any case resulting month will be >=1, (Jan=01)
+    }
+
+    day = daysLeftPrev;
+    day = day+1; /// we say "the first of april, not 0th".
+
     int runMDay = (run-443670000)%86400;
     int hour = (int)(runMDay/3600);
     int minute = (runMDay%3600)/60;
     int second = (runMDay%3600)%60;
-    string date = "2022-02-" + to_string(day)+"-"+to_string(hour)+"-"+to_string(minute)+"-"+to_string(second);
+    
+    string daystr = day < 10 ? "0"+to_string(day) : to_string(day);
+    string monthstr = month < 10 ? "0"+to_string(month) : to_string(month);
+    string hourstr = hour<10 ? "0"+to_string(hour) : to_string(hour);
+    string minutestr = minute<10 ? "0"+to_string(minute) : to_string(minute);
+    string secondstr = second<10 ? "0"+to_string(second) : to_string(second);
+
+    string date = to_string(year) + "-" + monthstr + "-" + daystr +"-"+hourstr+"-"+minutestr+"-"+secondstr;
     //cout << run << "    " << date << endl;
     return dateRunF::dateToNumber(date);
 }
 
 TString dateRunF::runToFileName(int run){
-    int day = (((int)(run-443670000)/86400)+31+1);
+    /// Run number to file name (usually, names at HADES mark the start of a run).
+
+    int day = (((int)(run-443670000)/86400)+31);
+    int year = 22 + (int)day/365;
+    int visoyears = (int)(year-21)/4;
+    day = day - 365*(year-22) - visoyears;
+    if (day<0){
+        year = year-1;
+        if ((int)(year-21)/4 == visoyears){
+            /// we are currently on visoyear
+            day = day+366;
+        }
+        else{
+            day = day+365;
+        }
+    }
+    day = day+1; /// we say "the first of april, not 0th".
+
     int runMDay = (run-443670000)%86400;
     int hour = (int)(runMDay/3600);
     int minute = (runMDay%3600)/60;
     int second = (runMDay%3600)%60;
+
+    string daystr = day < 100 ? "0"+to_string(day) : to_string(day);
+           daystr = day < 10 ? "0"+daystr : daystr;
     string hourstr = hour<10 ? "0"+to_string(hour) : to_string(hour);
     string minutestr = minute<10 ? "0"+to_string(minute) : to_string(minute);
     string secondstr = second<10 ? "0"+to_string(second) : to_string(second);
-    return "be220" + to_string(day)+hourstr+minutestr+secondstr;
+    return "be" + to_string(year) + daystr+hourstr+minutestr+secondstr;
 }
 
 int dateRunF::getRunIdFromAnyFileName(string fName, size_t leftCut, size_t rightCut){
-  string erased = fName.erase(0,leftCut);
-  erased = erased.substr(0, erased.size()-rightCut);
-  //cout << erased << endl;
-  int date = stoi(erased);
-  int month = (date/1000000-31)/29;
-  int day = (date/1000000-31)-28*((date/1000000-31)/29);
-  int hour= (date%1000000)/10000;
-  int min = ((date%1000000)%10000)/100;
-  int sec = ((date%1000000)%10000)%100;
-  //std::cout << 443670000 + (day-1)*86400 + hour*3600 + min*60 + sec << std::endl;
-  return 443670000 + month*(28*86400) + (day-1)*86400 + hour*3600 + min*60 + sec;
+    /// Old function, shouldn't be used
+    string erased = fName.erase(0,leftCut);
+    erased = erased.substr(0, erased.size()-rightCut);
+    //cout << erased << endl;
+    int date = stoi(erased);
+    int month = (date/1000000-31)/29;
+    int day = (date/1000000-31)-28*((date/1000000-31)/29);
+    int hour= (date%1000000)/10000;
+    int min = ((date%1000000)%10000)/100;
+    int sec = ((date%1000000)%10000)%100;
+    //std::cout << 443670000 + (day-1)*86400 + hour*3600 + min*60 + sec << std::endl;
+    return 443670000 + month*(28*86400) + (day-1)*86400 + hour*3600 + min*60 + sec;
 }
 
 int dateRunF::getRunIdFromFileName(string fName){
-    return getRunIdFromAnyFileName(fName,5,10);
+    /// Maybe add viso years, need to check
+    string inputString = fName;
+
+    size_t startPos = inputString.find("be");
+    size_t endPos = inputString.find(".hld");
+    size_t prefixLength = ((string)("be")).size();
+    size_t length = endPos - prefixLength - 2;
+    inputString = inputString.substr(startPos + prefixLength, length);
+
+    int year = stoi(inputString.substr(0, 2));
+    int dayYear = stoi(inputString.substr(2, 3));
+    int hour = stoi(inputString.substr(5, 2));
+    int minute = stoi(inputString.substr(7, 2));
+    int second = stoi(inputString.substr(9, 2));
+
+    int result = 443670000 - 31*86400 + (year-22)*365*86400 + (dayYear-1)*86400 + hour*3600 + minute*60 + second;
+    return result;
 }
+
 
 int dateRunF::getRunIdFromDQFileName(string fName){
   return getRunIdFromAnyFileName(fName,5,26);
@@ -259,7 +412,7 @@ vector<TString> dateRunF::getlistOfFileNames(TString inDir){
 void dateRunF::saveRunNumbers(string expFilesLocation){
     vector<TString> filesNames = dateRunF::getlistOfFileNames( (expFilesLocation + "0*/out/*01.hld.log").c_str());
     ofstream fout1;
-	fout1.open((saveLocation + "runlist.dat").c_str());
+	fout1.open((saveLocation + "runlistzxc.dat").c_str());
     for (size_t i = 0; i < filesNames.size(); i++){
         fout1 << dateRunF::getRunIdFromFileName((string)(filesNames[i])) << endl;
         //fout1 << filesNames[i] << "  " << dateRunF::getRunIdFromFileName((string)(filesNames[i])) << endl;
@@ -270,9 +423,9 @@ void dateRunF::saveRunNumbers(string expFilesLocation){
 vector<int> dateRunF::loadrunlist(int run1, int run2){
     vector<int> result;
     ifstream fin1;
-	fin1.open((saveLocation+"runlist.dat").c_str());
-    while (fin1.get() != EOF){
-        int run = 0; fin1 >> run;
+	fin1.open((saveLocation+"runlistzxc.dat").c_str());
+    int run = 0;
+    while (fin1 >> run){
         if (run <= run1 || run >= run2)
             continue;
         result.push_back(run);
@@ -368,10 +521,26 @@ std::map< int, vector<double> > preTrainFunctions::clbTableToVectorsTarget(vecto
         shapeSize = 0;
     int outShapeLength = 1; for (int x: shape){ outShapeLength*=x; }
 
+    cout << "ststs" << endl;
+
     for (size_t i = 0; i < intable.size(); i=i+outShapeLength){
+        if (i+outShapeLength >= intable.size()){
+            break;
+        }
+        map<int,int> runsRun;
+        for (size_t j = 0; j < outShapeLength; j++){
+            runsRun[intable[i+j].first] = intable[i+j].first;
+        }
+        if (runsRun.size() > 1){
+            break;
+        }
+
         vector<double> meanValues;
         for (size_t j = 0; j < outShapeLength; j++){
             meanValues.push_back(intable[i+j].second[shapeSize]);
+        }
+        for (size_t j = 0; j < outShapeLength; j++){
+            meanValues.push_back(intable[i+j].second[shapeSize+1]);
         }
         arr[intable[i].first] = meanValues;
     }

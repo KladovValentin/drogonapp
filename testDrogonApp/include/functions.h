@@ -37,6 +37,7 @@ namespace vectorFunctions {
     extern vector<double> runningMeanVector(vector<double> vect, int avRange);
     extern vector<double> normalizeVectorNN(vector<double> vect);
     extern double normalizeVector(vector<double>& vect);
+    extern vector<float> transposeTensorDimensions(vector<float> inputTensor, vector<long int> dims, vector<size_t> permutation);
 };
 
 

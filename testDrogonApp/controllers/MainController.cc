@@ -10,37 +10,47 @@ using namespace std;
 
 
 /// @brief  SETUP MAIN CONTROLLER - LAUNCH MAIN SYSTEMS
+//MainController::MainController(const std::shared_ptr<ControllerBase>& icontrollerBase) {
 MainController::MainController() {
     std::cout << "a" << std::endl;
+    controllerBase = ServiceLocator::instance().getControllerBase();
 
-    serverData = new ServerData();
-    triggerManager = new TriggerDataManager();
-    epicsManager = new EpicsDBManager(serverData->getDbListeningPort());
-    neuralNetwork = new NeuralNetwork();
+    //serverData = new ServerData();
+    //triggerManager = new TriggerDataManager();
+    //epicsManager = new EpicsDBManager(serverData->getDbListeningPort());
+    //neuralNetwork = new NeuralNetwork();
 
-    cout << "b" << endl;
+    serverData = controllerBase->serverData;
+    triggerManager = controllerBase->triggerManager;
+    epicsManager = controllerBase->epicsManager;
+    neuralNetwork = controllerBase->neuralNetwork;
+
+    //cout << controllerBase->serverData << endl;
+
+    //int portt = controllerBase->serverData->getDbListeningPort();
+    //cout << "port mainController " << portt << endl;
+    //controllerBase->serverData->setDbListeningPort(portt+1);
+    //cout << controllerBase->serverData->getDbListeningPort() << endl;
+    //cout << "b" << endl;
 
 
-    triggerManager->changeHistsLocation(serverData->getTrHistsLoc());
-    triggerManager->changeChannels(serverData->getTrChannels());
-    epicsManager->changeChannelNames(serverData->getDbShape(), serverData->getDbChannels());
+    //triggerManager->changeHistsLocation(serverData->getTrHistsLoc());
+    //triggerManager->changeChannels(serverData->getTrChannels());
+    //epicsManager->changeChannelNames(serverData->getDbShape(), serverData->getDbChannels());
     
-    controllerBase = new ControllerBase(triggerManager, epicsManager, neuralNetwork, serverData); 
+    //controllerBase = new ControllerBase(triggerManager, epicsManager, neuralNetwork, serverData); 
 
     //epicsManager->makeTableWithEpicsData("new", 444140006, 1e9);
     //epicsManager->makeTableWithEpicsData("app", 444244740, 445533980);
     //epicsManager->makeTableWithEpicsData("new", 444244740, 444246000);
-    //neuralNetwork->remakeInputDataset();
+    //neuralNetwork->remakeInputDataset(true);
     //neuralNetwork->retrainModel();
     //controllerBase->compareTargetPredictionFromTraining();
 
     //serverData->readSettingsJSON();
     //serverData->writeSettingsJSON();
 
-    //std::string launchScript = (string)("cd /lustre/hades/user/vkladov/sub/testBatchFarm;") +
-    //                            (string)(" . ./sendScript_raw_SL.sh 45");
-    //std::system("g++ -o fetchNewCalibrations fetchNewCalibrations.cc");
-    std::system("nohup ~/gsiWorkFiles/fetchMDCcalibrations/fetchNewCalibrations > ~/output.log 2>&1 &");
+    
 
     cout << "sent commands, can work here further" << endl;
 
@@ -140,7 +150,7 @@ void MainController::readTriggTable(const HttpRequestPtr &req, std::function<voi
 }
 void MainController::retrainModel(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback, bool remakeInput){
     if (remakeInput)
-        neuralNetwork->remakeInputDataset();
+        int a = neuralNetwork->remakeInputDataset(true);
     neuralNetwork->retrainModel();
     Json::Value ret;
     ret["result"]="ok";
@@ -155,7 +165,7 @@ void MainController::getPrediction(const HttpRequestPtr &req,
                int run1){
 
     //float prediction = controllerBase->getPrediction(run1, run2);
-    float prediction = neuralNetwork->getPrediction(controllerBase->makeNNInputTensor(run1));
+    vector<float> prediction = neuralNetwork->getPrediction(controllerBase->makeNNInputTensor(run1));
 
 
     /*ifstream fin2;
@@ -173,7 +183,7 @@ void MainController::getPrediction(const HttpRequestPtr &req,
 
     Json::Value ret;
     ret["result"]="ok";
-    ret["prediction"]=prediction;
+    ret["prediction"]=prediction[0];
     //ret["token"]=drogon::utils::getUuid();
     auto resp=HttpResponse::newHttpJsonResponse(ret);
     callback(resp);
@@ -183,7 +193,7 @@ void MainController::getContinuousPrediction(const HttpRequestPtr &req,
                std::function<void (const HttpResponsePtr &)> &&callback){
     
     
-    float prediction = controllerBase->moveForwardCurrentNNInput();
+    vector<float> prediction = controllerBase->moveForwardCurrentNNInput();
     int currentRun = serverData->getCurrentRun();
     
 
@@ -201,7 +211,7 @@ void MainController::getContinuousPrediction(const HttpRequestPtr &req,
     Json::Value ret;
     ret["result"]="ok";
     ret["run"]=currentRun;
-    ret["prediction"]=prediction;
+    ret["prediction"]=prediction[0];
     ret["target"]=targets[currentRun];
     cout << targets[currentRun] << endl;
     auto resp=HttpResponse::newHttpJsonResponse(ret);
@@ -268,6 +278,18 @@ void MainController::getPredictedList(const HttpRequestPtr &req, std::function<v
     Json::Value ret;
     for (const auto& value : predictedList)
         ret[to_string(value.first)] = value.second;
+    auto resp=HttpResponse::newHttpJsonResponse(ret);
+    callback(resp);
+}
+
+
+void MainController::switchContinuousPredictionLoop(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback){
+    Json::Value ret;
+    bool currentContinuousPredictionStatus = controllerBase->serverData->getContinuousPredictionRunning();
+    cout << currentContinuousPredictionStatus << " -> ";
+    controllerBase->serverData->setContinuousPredictionRunning(!currentContinuousPredictionStatus);
+    cout << controllerBase->serverData->getContinuousPredictionRunning() << endl;
+    ret["response"] = !currentContinuousPredictionStatus;
     auto resp=HttpResponse::newHttpJsonResponse(ret);
     callback(resp);
 }

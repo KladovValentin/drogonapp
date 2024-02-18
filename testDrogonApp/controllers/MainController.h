@@ -4,7 +4,9 @@
 #include "../include/workWithTrigger.h"
 #include "../include/workWithDB.h"
 #include "../include/neuralNetwork.h"
-#include "../include/controllerBase.h"
+//#include "../include/controllerBase.h"
+#include "../include/globals.h"
+#include "../include/serviceLocator.h"
 
 #include <stdio.h>
 #include <string>
@@ -19,9 +21,12 @@ private:
     TriggerDataManager* triggerManager;
     EpicsDBManager* epicsManager;
     NeuralNetwork* neuralNetwork;
-    ControllerBase* controllerBase;
+    std::shared_ptr<ControllerBase> controllerBase;
 
 public:
+
+    //MainController(const std::shared_ptr<ControllerBase>& icontrollerBase);
+    MainController();
 
     METHOD_LIST_BEGIN
         /*METHOD_ADD(MainController::getTrHistsLoc, "/getTrHistsLoc", Get);
@@ -43,12 +48,12 @@ public:
         METHOD_ADD(MainController::getVectorsForTrainingCheck, "/getVectorsForTrainingCheck", Post);
         METHOD_ADD(MainController::getPredictedList, "/getPredictedList", Get);
 
+        METHOD_ADD(MainController::switchContinuousPredictionLoop, "/switchContinuousPredictionLoop", Get);
+
         METHOD_ADD(MainController::stopServer, "/stopServer", Get);
 
     METHOD_LIST_END
 
-
-    MainController();
 
     /*void MainController::getTrHistsLoc(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void MainController::setTrHistsLoc(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback, string newTrHistsLoc);
@@ -73,6 +78,8 @@ public:
     void getVectorsForTrainingCheck(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 
     void getPredictedList(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+
+    void switchContinuousPredictionLoop(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 
     void stopServer(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 

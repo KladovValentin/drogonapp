@@ -18,19 +18,20 @@ using namespace std;
 
 class ServerData {
     private:
+
+        /// @brief settings or ~constants
         string triggerHistsPath;
         int epicsDBPort;
-
         vector<int> trigChannels;
-        //vector<string> dbNames;
         vector< pair <vector<int>, string> > dbNames;
         vector<size_t> dbShape;
 
 
+        /// @brief Dinamic information
         vector<int> runBorders;
         vector<float> currentNNInput;
         int currentRunIndex;
-
+        bool continuousPredictionRunning;
         map<int, float> predictedValues;
 
 
@@ -57,6 +58,8 @@ class ServerData {
         int getCurrentRunIndex(){ return currentRunIndex; }
         map<int, float> getPredictedValues() { return predictedValues; }
 
+        bool getContinuousPredictionRunning() {return continuousPredictionRunning;}
+
 
         void setTrHistsLoc(string newLoc){ triggerHistsPath = newLoc; }
         void setDbListeningPort(int newPort){ epicsDBPort = newPort; }
@@ -65,6 +68,8 @@ class ServerData {
         void setCurrentNNInput(vector<float> newNNInput) {currentNNInput = newNNInput; }
         void setCurrentRunIndex(int newCurrentRunIndex) {currentRunIndex = newCurrentRunIndex; } 
         void setPredictedValues(map<int, float> newValues) { predictedValues = newValues;}
+
+        void setContinuousPredictionRunning(bool set) { continuousPredictionRunning = set; }
 };
 
 #endif

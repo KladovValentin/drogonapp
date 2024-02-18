@@ -5,19 +5,33 @@
 #include "../include/constants.h"
 
 #include <chrono>
+#include <filesystem>
 
 using namespace std;
 using namespace preTrainFunctions;
 using namespace vectorFunctions;
 using namespace dateRunF; 
+namespace fs = std::filesystem;
 
-ControllerBase::ControllerBase(TriggerDataManager* itriggerManager, EpicsDBManager* iepicsManager, NeuralNetwork* ineuralNetwork, ServerData* iserverData){
-    triggerManager = itriggerManager;
-    epicsManager = iepicsManager;
-    neuralNetwork = ineuralNetwork;
-    serverData = iserverData;
+//ControllerBase::ControllerBase(TriggerDataManager* itriggerManager, EpicsDBManager* iepicsManager, NeuralNetwork* ineuralNetwork, ServerData* iserverData){
+ControllerBase::ControllerBase(){
+    //triggerManager = itriggerManager;
+    //epicsManager = iepicsManager;
+    //neuralNetwork = ineuralNetwork;
+    //serverData = iserverData;
+    serverData = new ServerData();
+    //serverData = std::make_shared<ServerData>();
+    triggerManager = new TriggerDataManager();
+    epicsManager = new EpicsDBManager(serverData->getDbListeningPort());
+    neuralNetwork = new NeuralNetwork();
     
-    sentenceLength = 15;
+    triggerManager->changeHistsLocation(serverData->getTrHistsLoc());
+    triggerManager->changeChannels(serverData->getTrChannels());
+    epicsManager->changeChannelNames(serverData->getDbShape(), serverData->getDbChannels());
+
+    serverData->setContinuousPredictionRunning(true);
+
+    sentenceLength = 5;
 
     out = new TFile("outHome.root","RECREATE");
     out->cd();
@@ -30,6 +44,73 @@ ControllerBase::ControllerBase(TriggerDataManager* itriggerManager, EpicsDBManag
 
 ControllerBase::~ControllerBase(){
     out->Close();
+}
+
+
+void ControllerBase::checkNewSettingsConfig(){
+
+    string triggerHistsPath = serverData->getTrHistsLoc();
+    //int epicsDBPort = serverData->getDbListeningPort;
+    vector<int> trigChannels = serverData->getTrChannels();
+    vector< pair <vector<int>, string> > dbNames = serverData->getDbChannels();
+    vector<size_t> dbShape = serverData->getDbShape();
+
+    serverData->readSettingsJSON();
+
+    if (serverData->getTrHistsLoc() != triggerHistsPath){
+        triggerManager->changeHistsLocation(serverData->getTrHistsLoc());
+        cout << "controllerBase: changing trHistLoc" << endl;
+    }
+    if (serverData->getTrChannels() != trigChannels){
+        triggerManager->changeChannels(serverData->getTrChannels());
+        cout << "controllerBase: changing trChan" << endl;
+    }
+    if (serverData->getDbShape() != dbShape || serverData->getDbChannels() != dbNames){
+        epicsManager->changeChannelNames(serverData->getDbShape(), serverData->getDbChannels());
+        cout << "controllerBase: changing dbChan" << endl;
+    }
+
+    /// Check if new neural nerwork is available
+    if (fs::exists(saveLocation+ "function_prediction/tempModelnew.onnx")){
+
+        string modelOld = saveLocation+ "function_prediction/tempModelold.onnx";
+        string model = saveLocation+ "function_prediction/tempModel.onnx";
+        string modelNew = saveLocation+ "function_prediction/tempModelnew.onnx";
+
+        string modelpOld = saveLocation+ "function_prediction/tempModelold.pt";
+        string modelp = saveLocation+ "function_prediction/tempModel.pt";
+        string modelpNew = saveLocation+ "function_prediction/tempModelnew.pt";
+
+        string meanOld = saveLocation+ "function_prediction/meanValuesold.txt";
+        string mean = saveLocation+ "function_prediction/meanValues.txt";
+        string meanNew = saveLocation+ "function_prediction/meanValuesnew.txt";
+
+        string stdOld = saveLocation+ "function_prediction/stdValuesold.txt";
+        string std = saveLocation+ "function_prediction/stdValues.txt";
+        string stdNew = saveLocation+ "function_prediction/stdValuesnew.txt";
+
+        fs::copy_file(model, modelOld, fs::copy_options::overwrite_existing);
+        fs::copy_file(modelNew, model, fs::copy_options::overwrite_existing);
+        fs::remove(modelNew);
+
+        fs::copy_file(modelp, modelpOld, fs::copy_options::overwrite_existing);
+        fs::copy_file(modelpNew, modelp, fs::copy_options::overwrite_existing);
+        fs::remove(modelpNew);
+
+        fs::copy_file(mean, meanOld, fs::copy_options::overwrite_existing);
+        fs::copy_file(meanNew, mean, fs::copy_options::overwrite_existing);
+        fs::remove(meanNew);
+        
+        fs::copy_file(std, stdOld, fs::copy_options::overwrite_existing);
+        fs::copy_file(stdNew, std, fs::copy_options::overwrite_existing);
+        fs::remove(stdNew);
+
+        neuralNetwork->setupNNPredictions();
+    }
+}
+
+void ControllerBase::setNewSettingsConfig(){
+    serverData->writeSettingsJSON();
 }
 
 
@@ -205,7 +286,7 @@ vector<float> ControllerBase::makeNNInputTensor(int run){
     int index = std::distance(runBorders.begin(), p);
 
     int nBack = 0;
-    while (tempInpInversed.size() < sentenceLength){
+    while (tempDBInversed.size() < sentenceLength){
         size_t j = (index-nBack) < 0 ? 0 : (size_t)(index-nBack);
         nBack+=1;
         //vector <double> trPars = triggerManager->getTriggerData(runBorders[j])[0];
@@ -238,19 +319,26 @@ vector<float> ControllerBase::makeNNInputTensor(int run){
     return nnInpTens;
 }
 
-float ControllerBase::moveForwardCurrentNNInput(){
+vector<float> ControllerBase::moveForwardCurrentNNInput(){
+
+    /// Change input (update a sentence) and current run, 
+    /// Return a prediction, 
+    /// Update an input epics table for retraining to facilitate quick online work
     
     auto start = std::chrono::high_resolution_clock::now();
 
-    vector<int> runlist = serverData->getRunList();
+    //vector<int> runlist = serverData->getRunList();
+    vector<int> runlist = loadrunlist(0,1e9);
     int currentRunIndex = serverData->getCurrentRunIndex();
     int currentRun = runlist[currentRunIndex];
     vector<float> currentNNInput = serverData->getCurrentNNInput();
-    if (currentRunIndex+2 >= runlist.size()){
-        return -1;
+    cout << currentRunIndex << "    " << runlist.size() << endl;
+    if (currentRunIndex+1 >= runlist.size()){
+        vector<float> resultBlank;
+        return resultBlank;
     }
     int nextRun = runlist[currentRunIndex+1];
-    int nextNextRun = runlist[currentRunIndex+2];
+    //int nextNextRun = runlist[currentRunIndex+2];
 
     long long elapsed2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
 
@@ -259,26 +347,25 @@ float ControllerBase::moveForwardCurrentNNInput(){
     long long elapsed5 = 0;
     if (currentNNInput.size() < sentenceLength){
         currentNNInput = makeNNInputTensor(currentRun);
-        if (currentNNInput.size() < sentenceLength)
-            return -3;
+        //if (currentNNInput.size() < sentenceLength)
+        //    return -3;
     }
     else{
 
         elapsed3 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
 
-        currentRunIndex = currentRunIndex+1;
-        currentRun = nextRun;
-        nextRun = nextNextRun;
         //vector <double> trPars = triggerManager->getTriggerData(currentRun)[0];
         //if (trPars.size() <= 1){
         //    serverData->setCurrentRunIndex(currentRunIndex);
         //    return -2;
         //}
         
+
         elapsed4 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
 
         //vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(currentRun, nextRun), trPars);
         vector<double> dbData = epicsManager->getDBdata(currentRun, nextRun);
+        cout << "appending table" << endl;
         epicsManager->appendDBTable("app", currentRun, dbData);
         vector<float> nnInpPars = neuralNetwork->formNNInput(dbData);
         currentNNInput.erase(currentNNInput.begin(), currentNNInput.begin() + nnInpPars.size());
@@ -286,17 +373,20 @@ float ControllerBase::moveForwardCurrentNNInput(){
             currentNNInput.push_back(nnInpPars[i]);
         }
 
+        currentRunIndex = currentRunIndex+1;
+        currentRun = nextRun;
+
     }
     
     elapsed5 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
 
     serverData->setCurrentNNInput(currentNNInput);
     serverData->setCurrentRunIndex(currentRunIndex);
-    float output = neuralNetwork->getPrediction(currentNNInput);
+    vector<float> output = neuralNetwork->getPrediction(currentNNInput);  //nodes length vector as output
     
     auto elapsed6 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
 
-    cout << elapsed2 << "   " << elapsed3 << "   " << elapsed4 << "   " << elapsed5 << "   " << elapsed6 << endl;
+    //cout << elapsed2 << "   " << elapsed3 << "   " << elapsed4 << "   " << elapsed5 << "   " << elapsed6 << endl;
     if (elapsed3!=0){
         hTriggerDataTime->Fill((elapsed4-elapsed3)/1000.);
         hEpicsDataTime->Fill((elapsed5-elapsed4)/1000.);
@@ -390,7 +480,7 @@ void ControllerBase::drawManyPredictions(){
                     nnInpTens.push_back(nnInpPars[i]);
                 }
                 cout << nnInpTens[3] << " " << nnInpTens[15] << " " << nnInpTens[16] << endl;
-                float predict = neuralNetwork->getPrediction(nnInpTens);
+                float predict = (neuralNetwork->getPrediction(nnInpTens))[0];
                 
                 runsPred.push_back(run);
                 valuesPred.push_back((double)predict);

@@ -45,11 +45,15 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ROOT_LD_FLAGS}")
 #
 # and comment out the following lines
 
+
+# Find Python interpreter
+find_package(Python REQUIRED COMPONENTS Development)
 find_package(Drogon CONFIG REQUIRED)
-find_package(ROOT REQUIRED)
+find_package(ROOT REQUIRED COMPONENTS RHTTP)
 target_link_libraries(${PROJECT_NAME}
         PRIVATE Drogon::Drogon
         ${ROOT_LIBRARIES}
+        ${Python_LIBRARIES}
         /home/localadmin_jmesschendorp/onnxruntime-linux-x64-1.14.1/lib/libonnxruntime.so.1.14.1
         -lpqxx
 )
@@ -85,6 +89,8 @@ drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
 
 target_include_directories(${PROJECT_NAME}
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+                                   ${ROOT_INCLUDE_DIRS}
+                                   ${Python_INCLUDE_DIRS}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models
                                    ${CMAKE_CURRENT_SOURCE_DIR}/include
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers

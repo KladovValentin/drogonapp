@@ -28,7 +28,7 @@ body > .semilayer {
 	flex-direction: row;
 }
 .button{
-	width:18%;
+	width:25%;
 	line-height: 16px;
 	height:35px;
 	margin: 5px 5px 5px 5px;
@@ -47,4 +47,48 @@ body > .semilayer {
 .button:hover {
 	background-color: rgb(173, 216, 230); /* Green */
 	color: white;
+}
+
+.sidePannel {
+	height: 100%;    
+	width: 20%;
+	background: #eeeeee;
+	border: 1px solid black;
+	position: fixed;    
+	left: 0%;    
+	top: 0%; 
+	text-align: center;
+	transition: transform 1s;
+}
+
+.mainDisplay {
+	height: 100%;
+	width: 80%;
+	background: #eeeeee;
+	border: 1px solid black;
+	position: fixed;    
+	right: 0%;    
+	top: 0%; 
+	transition: transform 1s;
+}
+
+.thttpserver{
+	height: 100%;
+	width: 100%;
+	background: #eeeeee;
+	position: absolute;    
+	left: 0%;    
+	top: 0%; 
+	display: block;
+}
+
+.settingsPage{
+	height: 100%;
+	width: 100%;
+	background: #eeeeee;
+	position: absolute;    
+	left: 0%;    
+	top: 0%; 
+	text-align: center;
+	display: none;
 }

@@ -67,6 +67,16 @@ function handleButton3Click(){
     Plotly.newPlot('plotlyChart', data);
 }
 
+function switchContinuousPredictionLoop(){
+    var xmlHttp = new XMLHttpRequest();
+    let line = "maincontroller/switchContinuousPredictionLoop"
+    xmlHttp.open( "GET", serverAddress+line, false);
+    xmlHttp.send( null );
+    console.log(xmlHttp.responseText);
+
+    let json = JSON.parse(xmlHttp.responseText);
+    responset = json.response
+}
 
 
 
@@ -77,5 +87,14 @@ document.getElementById("button2").addEventListener("click",function(){
     handleButton2Click();
 });
 document.getElementById("button3").addEventListener("click",function(){
-    handleButton3Click();
+    //handleButton3Click();
+    switchContinuousPredictionLoop();
 });
+
+document.getElementById("settingsButton").addEventListener("click",function(){
+    switchMainDisplayToFrame("settingsPage");
+});
+document.getElementById("thttpserverButton").addEventListener("click",function(){
+    switchMainDisplayToFrame("thttpserver");
+});
+    

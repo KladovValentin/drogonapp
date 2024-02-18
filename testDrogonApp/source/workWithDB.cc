@@ -44,7 +44,7 @@ void EpicsDBManager::remakeChannelIds(){
         //cout << name << endl;
         pqxx::work w(*pqxxConnection);
         pqxx::result rows = w.exec("SELECT channel_id FROM channel WHERE name = '"+name+"'");
-        cout << "channel " << name << " found! " << rows.begin()["channel_id"].as<int>() << endl;
+        //cout << "channel " << name << " found! " << rows.begin()["channel_id"].as<int>() << endl;
         if (rows.size() < 1){
             cout << "channel " << name << " not found!" << endl;
             channel_ids.push_back(0);
@@ -137,7 +137,6 @@ void EpicsDBManager::changeListeningPort(int newPort){
 vector<double> EpicsDBManager::getDBdataBase(string command, string dateLeft){
 
     /// With verification on null or 0
-
     vector<double> result;
     vector< vector<double> > resultT;
     for (size_t i = 0; i < channel_ids.size(); i++){
@@ -233,6 +232,9 @@ vector<double> EpicsDBManager::getDBdata(string date1, string date2){
 
 vector<double> EpicsDBManager::getDBdata(int run, int runnext){
     vector<double> result;
+    if (runnext-run > 300){
+        runnext = run+300;
+    }
     result = getDBdata(runToDate(run), runToDate(runnext));
     //for (size_t i = 0; i < result.size(); i++)
     //    cout << result[i] << endl;
@@ -243,7 +245,7 @@ vector<double> EpicsDBManager::getDBdata(int run, int runnext){
 void EpicsDBManager::appendDBTable(string mode, int runl, vector<double> dbPars){
 
     std::ofstream fout;
-    string saveFileStr = ((string)(saveLocation+"info_tables/MDCModSec1.dat"));
+    string saveFileStr = ((string)(saveLocation+"info_tables/MDCModSec1zxc.dat"));
     const char* saveFile = saveFileStr.c_str();
     if (mode == "new") {
         // move previous table to the available history file
@@ -251,7 +253,7 @@ void EpicsDBManager::appendDBTable(string mode, int runl, vector<double> dbPars)
         string historyFileStr;
         while (fileExists){
             countHist+=1;
-            historyFileStr = ((string)(saveLocation+"info_tables/MDCModSec1Hist" + std::to_string(countHist) + ".dat"));
+            historyFileStr = ((string)(saveLocation+"info_tables/MDCModSec1Hist" + std::to_string(countHist) + "zxc.dat"));
             const char* historyFileT = historyFileStr.c_str();
             fileExists = fs::exists(historyFileT);
         }
@@ -266,6 +268,7 @@ void EpicsDBManager::appendDBTable(string mode, int runl, vector<double> dbPars)
     
     
     if (dbPars.size() > 0){
+        cout << "s" << endl;
         fout << runl << "  ";
         for (size_t j = 0; j < dbPars.size(); j++){
             fout << dbPars[j] << "  ";

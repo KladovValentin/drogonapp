@@ -1,8 +1,9 @@
 #ifndef NEURALNETWORK_H
 #define NEURALNETWORK_H
 
-#include "/home/localadmin_jmesschendorp/onnxruntime-linux-x64-1.14.1/include/onnxruntime_cxx_api.h"
+#include <Python.h>
 
+#include "/home/localadmin_jmesschendorp/onnxruntime-linux-x64-1.14.1/include/onnxruntime_cxx_api.h"
 
 #include <iostream>
 #include <fstream>
@@ -35,6 +36,7 @@ using namespace std;
 class NeuralNetwork {
     protected:
         Ort::Session* mSession;
+        Ort::Env* env;
         size_t inputTensorSize;
         size_t outputTensorSize;
         std::vector<int64_t> mInputDims;
@@ -49,15 +51,16 @@ class NeuralNetwork {
         ~NeuralNetwork();
 
         void setupNNPredictions();
-        float getPrediction(vector<float> inputTensorValues);   
+        vector<float> getRawPredictionPython(vector<float> normalizedInput);
+        vector<float> getPrediction(vector<float> inputTensorValues);   
 
         void drawInputTargetCorrelations(TGraphErrors* target, vector< vector<double> > inputs);
         void drawInputTargetCorrelations(vector< vector<double> > targets, vector< vector<double> > inputs);
         void drawTargetStability(TGraphErrors* targetsAll, TGraphErrors* targetsPP, TGraphErrors* targetsHH);
         void drawTargetSectorComparison();
-        void drawTargetDimensionsComp(std::map< int, vector<double> > meanToTModSec, vector<int> shape);
+        TCanvas* drawTargetDimensionsComp(std::map< int, vector<double> > meanToTModSec, vector<int> shape);
 
-        void remakeInputDataset();
+        int remakeInputDataset(bool draw);
         void retrainModel();
 
         vector<float> formNNInput(vector<double> db, vector<double> tr);

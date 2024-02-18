@@ -5,6 +5,8 @@
 #include "workWithDB.h"
 #include "neuralNetwork.h"
 #include "serverData.h"
+//#include "histsUpdater.h"
+//#include "continuousPredictor.h"
 
 // ROOT
 #include "TH1F.h"
@@ -16,11 +18,6 @@
 
 class ControllerBase {
     private:
-        TriggerDataManager* triggerManager;
-        EpicsDBManager* epicsManager;
-        NeuralNetwork* neuralNetwork;
-        ServerData* serverData;
-
         vector<float> runningNnInpTens;
         int sentenceLength;
 
@@ -30,14 +27,28 @@ class ControllerBase {
         TH1F* hNetworkDataTime;
 
     public:
-        ControllerBase(TriggerDataManager* triggerManager, EpicsDBManager* epicsManager, NeuralNetwork* neuralNetwork, ServerData* serverData);
+        TriggerDataManager* triggerManager;
+        EpicsDBManager* epicsManager;
+        NeuralNetwork* neuralNetwork;
+        ServerData* serverData;
+        //std::shared_ptr<ServerData> serverData;
+
+        //HistsUpdater* fHistsUpdater;
+        //ContinuousPredictor* fContinuousPredictor;
+
+        //ControllerBase(TriggerDataManager* triggerManager, EpicsDBManager* epicsManager, NeuralNetwork* neuralNetwork, ServerData* serverData);
+        ControllerBase();
         ~ControllerBase();
+
+        void checkNewSettingsConfig();
+
+        void setNewSettingsConfig();
 
         void compareTargetPredictionFromTraining();
 
         vector<float> makeNNInputTensor(int run);
 
-        float moveForwardCurrentNNInput();
+        vector<float> moveForwardCurrentNNInput();
 
         void drawManyPredictions();
 

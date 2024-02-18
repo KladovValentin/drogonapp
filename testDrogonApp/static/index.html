@@ -21,14 +21,32 @@
   </head>
 
   <body>
+
     <div id='plotlyChart'><!-- Plotly chart will be drawn inside this DIV --></div>
 
+    <div class="sidePannel" id = "sidePannel">
+      <div class = "button" id = "button1">Button1</div>
+      <div class = "button" id = "button2">Button2</div>
+      <div class = "button" id = "button3">Button3</div>
+      <div class = "button" id = "settingsButton">settings</div>
+      <div class = "button" id = "thttpserverButton">QA control</div>
+    </div>
+    <script src="sidePannel.js"></script>
 
-    <div class = "button" id = "button1">Button1</div>
-    <div class = "button" id = "button2">Button2</div>
-    <div class = "button" id = "button3">Button3</div>
+    <div class="mainDisplay" id="mainDisplay">
+      <div class="settingsPage" id="settingsPage">settings</div>
+      <iframe class="thttpserver" id="thttpserver" src="http://localhost:8100/"></iframe>
+    </div>
+    <script src="mainDisplay.js"></script>
 
     <script src="handleButtons.js"></script>
   </body>
+
+  <script type='module'>
+    import { openFile, draw } from 'https://root.cern/js/latest/modules/main.mjs';
+    let file = await openFile('https://root.cern/js/files/hsimple.root');
+    let obj = await file.readObject('hpxpy;1');
+    //draw('drawing', obj, 'colz');
+  </script>
 
 </html>

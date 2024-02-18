@@ -12,34 +12,31 @@ using namespace dateRunF;
 
 NeuralNetwork::NeuralNetwork(){
     additionalFilter = {};
-    //setupNNPredictions();
+    setupNNPredictions();
 }
 NeuralNetwork::~NeuralNetwork(){
 }
 
 void NeuralNetwork::setupNNPredictions(){
-
     ifstream fin1;
     meanValues.clear();
 	fin1.open((saveLocation+"function_prediction/meanValues.txt").c_str());
-    while (!fin1.eof()){
-        double a;
-        fin1 >> a;
-        meanValues.push_back(a);
+    double meanV = 0;
+    while (fin1 >> meanV){
+        meanValues.push_back(meanV);
     }
     fin1.close();
     stdValues.clear();
     fin1.open((saveLocation+"function_prediction/stdValues.txt").c_str());
-    while (!fin1.eof()){
-        double a;
-        fin1 >> a;
-        stdValues.push_back(a);
+    double stdV = 0;
+    while (fin1 >> stdV){
+        stdValues.push_back(stdV);
     }
     fin1.close();
 
-    Ort::Env env;
+    env = new Ort::Env();
     std::string model_path = saveLocation+ "function_prediction/tempModel.onnx";
-    mSession = new Ort::Session(env, model_path.c_str(), Ort::SessionOptions{ nullptr });
+    mSession = new Ort::Session(*env, model_path.c_str(), Ort::SessionOptions{ nullptr });
     
     Ort::TypeInfo inputTypeInfo = mSession->GetInputTypeInfo(0);
     auto inputTensorInfo = inputTypeInfo.GetTensorTypeAndShapeInfo();
@@ -51,36 +48,181 @@ void NeuralNetwork::setupNNPredictions(){
     ONNXTensorElementDataType outputType = outputTensorInfo.GetElementType();
     mOutputDims = outputTensorInfo.GetShape();
 
-
-    inputTensorSize = mInputDims[1]*mInputDims[2];
-    //memoryInfo = Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtDeviceAllocator, OrtMemType::OrtMemTypeCPU);
+    size_t is = 1;
+    for (size_t i = 0; i < mInputDims.size(); i++){
+        is = is * mInputDims[i];
+        cout << "input DIMS:: ";
+        cout << mInputDims[i] << endl;
+    }
+    inputTensorSize = is;
 
     size_t os = 1;
-    for (size_t i = 0; i < mOutputDims.size(); i++)
+    for (size_t i = 0; i < mOutputDims.size(); i++){
         os = os * mOutputDims[i];
+        cout << "output DIMS:: ";
+        cout << mOutputDims[i] << endl;
+    }
     outputTensorSize = os;
 }
 
-float NeuralNetwork::getPrediction(vector<float> inputTensorValues){
-    for (size_t i = 0; i < 15; i++){
-        for (size_t j = 0; j < 12; j++){
-            inputTensorValues[i*12+j] = (float)((inputTensorValues[i*12+j]-meanValues[j])/stdValues[j]);
+
+PyObject* vectorToPyList(const std::vector<float>& vec) {
+    PyObject* pyList = PyList_New(vec.size());
+    if (!pyList) {
+        PyErr_Print();
+        return NULL;
+    }
+    for (size_t i = 0; i < vec.size(); ++i) {
+        PyObject* item = PyFloat_FromDouble(static_cast<double>(vec[i]));
+        if (!item) {
+            Py_DECREF(pyList);
+            PyErr_Print();
+            return NULL;
+        }
+        PyList_SET_ITEM(pyList, i, item);
+    }
+    return pyList;
+}
+
+std::vector<float> pyListToVector(PyObject* pyList) {
+    std::vector<float> vec;
+    if (!PyList_Check(pyList)) {
+        std::cerr << "Input is not a list\n";
+        return vec;
+    }
+    Py_ssize_t size = PyList_Size(pyList);
+    vec.reserve(size);
+    for (Py_ssize_t i = 0; i < size; ++i) {
+        PyObject* item = PyList_GetItem(pyList, i);
+        if (!item || !PyFloat_Check(item)) {
+            std::cerr << "Invalid list item at index " << i << "\n";
+            continue;
+        }
+        float value = static_cast<float>(PyFloat_AsDouble(item));
+        vec.push_back(value);
+    }
+    return vec;
+}
+
+vector<float> NeuralNetwork::getRawPredictionPython(vector<float> normalizedInput){
+    //Py_Initialize();
+    // Import the sys module
+    PyObject* sysModule = PyImport_ImportModule("sys");
+    if (sysModule) {
+        // Get the sys.path list
+        PyObject* sysPath = PyObject_GetAttrString(sysModule, "path");
+        if (sysPath) {
+            // Append the directory containing your script to sys.path
+            PyObject* path = PyUnicode_FromString("/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/function_prediction/");
+            PyList_Append(sysPath, path);
+            Py_DECREF(path);
+            Py_DECREF(sysPath);
+        }
+        Py_DECREF(sysModule);
+    }
+    cout << "a" << endl;
+    PyObject* pModule = PyImport_ImportModule("makePrediction");
+    cout << "b" << endl;
+    if (!pModule) {
+        PyErr_Print();
+        //return 1;
+    }
+    cout << "c" << endl;
+
+    // Get references to the Python functions
+    PyObject* pFirstFunc = PyObject_GetAttrString(pModule, "makeSinglePrediction");
+    if (!pFirstFunc || !PyCallable_Check(pFirstFunc)) {
+        PyErr_Print();
+        //return 1;
+    }
+
+    // Construct input for the first Python function
+    PyObject* pInputList = vectorToPyList(normalizedInput);
+
+    // Call the first Python function with the constructed input
+    PyObject* pResult = PyObject_CallFunctionObjArgs(pFirstFunc, pInputList, NULL);
+    if (!pResult) {
+        PyErr_Print();
+        Py_DECREF(pInputList);
+        //return 1;
+    }
+
+    // Convert the result to a vector<float>
+    std::vector<float> outputVec = pyListToVector(pResult);
+    for (const auto& value : outputVec) {
+        std::cout << value << " ";
+    }
+    std::cout << std::endl;
+
+    // Clean up
+    Py_DECREF(pModule);
+    Py_DECREF(pFirstFunc);
+    Py_DECREF(pInputList);
+    Py_DECREF(pResult);
+
+    // Finalize Python interpreter
+    //Py_Finalize();
+    return outputVec;
+}
+
+vector<float> NeuralNetwork::getPrediction(vector<float> inputTensorValues){
+    int sentenceLength = 5;
+    int inChannels = 7;
+    int nodesLength = 24;
+    int fullLength = sentenceLength * nodesLength * inChannels;
+    if (fullLength != inputTensorValues.size()) 
+        cout << fullLength << " " << inputTensorValues.size() << endl;
+
+    for (size_t i = 0; i < sentenceLength; i++){
+        for (size_t j = 0; j < inChannels; j++){
+            for (size_t k = 0; k < nodesLength; k++){
+                if (stdValues[j*nodesLength+k] != 0)
+                    inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k] = (float)((inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k]-meanValues[j*nodesLength+k])/stdValues[j*nodesLength+k]);
+                else
+                    inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k] = (float)((inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k]-meanValues[j*nodesLength+k])/1);
+            }
         }
     }
+
+    //for (float x: inputTensorValues){ cout << ", " << x;} cout << endl << endl << endl;
+    
+    
+    vector<float> outputTensorValues = getRawPredictionPython(inputTensorValues);
+
     const char* mInputName[] = {"input"};
     const char* mOutputName[] = {"output"};
     Ort::MemoryInfo memoryInfo = Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtDeviceAllocator, OrtMemType::OrtMemTypeCPU);
     Ort::Value inputTensor = Ort::Value::CreateTensor<float>(memoryInfo, inputTensorValues.data(),inputTensorSize,mInputDims.data(),mInputDims.size());
-    vector<float> outputTensorValues(outputTensorSize);
-    Ort::Value outputTensor = Ort::Value::CreateTensor<float>(memoryInfo, outputTensorValues.data(), outputTensorSize,mOutputDims.data(), mOutputDims.size());
-    mSession->Run(Ort::RunOptions{nullptr}, mInputName,&inputTensor, 1, mOutputName,&outputTensor, 1);
+    //vector<float> outputTensorValues(outputTensorSize);
+    //Ort::Value outputTensor = Ort::Value::CreateTensor<float>(memoryInfo, outputTensorValues.data(), outputTensorSize,mOutputDims.data(), mOutputDims.size());
+    //mSession->Run(Ort::RunOptions{nullptr}, mInputName,&inputTensor, 1, mOutputName,&outputTensor, 1);
+
+
+    //for (float x: outputTensorValues){ cout << " " << x;} cout << endl << endl;
+
+    //outputTensorValues = vectorFunctions::transposeTensorDimensions(outputTensorValues, mOutputDims, {1,0});  // Swap the dimensions (onnx has column-major ordering and I don't specify order of the output explicitly)
+
+    //onnxruntime::Transpose transposer(outputTensorValues.data(), mOutputDims);
+    //std::vector<size_t> permutation = {1, 0};
+    //transposer.ApplyToOutput(outputValues.data(), permutation);              
     
     //vector<float> outputProbs;
     //for (size_t i = 0; i < outputTensorSize; i++)
     //    outputProbs.push_back(outputTensorValues[i]);
-    cout << "output size is " << outputTensorValues.size() << " " << inputTensorSize << endl;
-    cout << "prediction is " << outputTensorValues[outputTensorValues.size()-1]*stdValues[stdValues.size()-1] + meanValues[meanValues.size()-1] << endl;
-    return outputTensorValues[outputTensorValues.size()-1]*stdValues[stdValues.size()-1] + meanValues[meanValues.size()-1];
+    //cout << "output size is " << outputTensorValues.size() << " " << inputTensorSize << endl;
+
+    vector<float> result;
+    for (size_t i = 0; i < nodesLength; i ++){
+        //cout << outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i] << endl;
+        //cout << outputTensorValues[outputTensorValues.size()-nodesLength+i] << endl;
+        //cout << outputTensorValues[(i+1)*sentenceLength-1]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i] << endl;
+        //cout <<          outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i] << endl;
+        //result.push_back(outputTensorValues[(i+1)*sentenceLength-1]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i]);
+        //result.push_back(outputTensorValues[(i+1)*sentenceLength-1]);
+        result.push_back(outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-2*nodesLength+i] + meanValues[meanValues.size()-2*nodesLength+i]);
+    }
+    return result;
+    //return outputTensorValues[outputTensorValues.size()-1]*stdValues[stdValues.size()-1] + meanValues[meanValues.size()-1];
 }
 
 void NeuralNetwork::drawTargetStability(TGraphErrors* targetsAll, TGraphErrors* targetsPP, TGraphErrors* targetsHH){
@@ -337,7 +479,7 @@ void NeuralNetwork::drawTargetSectorComparison(){
     delete canvas;
 }
 
-void NeuralNetwork::drawTargetDimensionsComp(std::map< int, vector<double> > meanToTModSec, vector<int> shape){
+TCanvas* NeuralNetwork::drawTargetDimensionsComp(std::map< int, vector<double> > meanToTModSec, vector<int> shape){
     // draw in a loop
     // share_pointers (smart_pointers)
 
@@ -429,12 +571,13 @@ void NeuralNetwork::drawTargetDimensionsComp(std::map< int, vector<double> > mea
         pad->SetGridy();
         grClbAll[i]->Draw("AP");
         canvas->Update();
-        cin.get();
+        //cin.get();
     }
-    delete canvas;
+    return canvas;
+    //delete canvas;
 }
 
-void NeuralNetwork::remakeInputDataset(){
+int NeuralNetwork::remakeInputDataset(bool draw){
     vector<int> outShape = {4,6};
     int outShapeLength = 1; for (int x: outShape){ outShapeLength*=x; }
 
@@ -443,13 +586,13 @@ void NeuralNetwork::remakeInputDataset(){
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL.dat");
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");/
     vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1.dat");
-
+    cout << "a" << endl;
     vector< pair< int, vector<double> > > tableTrig = readClbTableFromFile(saveLocation+"info_tables/trigger_data2.dat");
-
+    cout << "b" << endl;
     vector< pair< int, vector<double> > > tableClb = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDC1New.dat");
     vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCAllNew.dat"); 
     vector< pair< int, vector<double> > > tableClbHH = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCHHNew.dat"); 
-    cout << table[15].first << "    " << table[15].second[1] << endl;
+    //cout << table[15].first << "    " << table[15].second[1] << endl;
     cout << "tableas are read" << endl;
 
 
@@ -460,8 +603,11 @@ void NeuralNetwork::remakeInputDataset(){
     vector< vector<double> > meanToTAll = clbTableToVectorsTarget(tableClbAll);
     vector< vector<double> > meanToTHH = clbTableToVectorsTarget(tableClbHH);
 
+    cout << "c" << endl;
     vector< pair< int, vector<double> > > tableClbAllSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");
-    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModNew.dat");
+    //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModNew.dat");
+    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModzxc.dat");
+    cout << "d" << endl;
     std::map< int, vector<double> > meanToTModSec = clbTableToVectorsTarget(tableClbModSec, outShape);
 
     /*vector< vector<double> > arr[6];
@@ -472,7 +618,7 @@ void NeuralNetwork::remakeInputDataset(){
     int currentRun = 0;
     for (size_t i = 0; i < tableClbAllSec.size(); i++){
         if (currentRun != tableClbAllSec[i].first){
-            sectorsTargets.clear();
+            sectorsTargets.clear(); 
         }
         currentRun = tableClbAllSec[i].first;
 
@@ -505,10 +651,11 @@ void NeuralNetwork::remakeInputDataset(){
     }
 
     ///_____ Writing to a file
+    int runsWritten = 0;
     bool writeFile = true;
     if (writeFile){
         ofstream ofNN;
-        ofNN.open(saveLocation+"nn_input/outNNTestSM.dat"); //Test1
+        ofNN.open(saveLocation+"nn_input/outNNTestSMzxc.dat"); //Test1
         for (auto entry: meanToTModSec){
             int run = entry.first;
             auto p = std::find(dbPars[0].begin(), dbPars[0].end(), (double)run);
@@ -529,10 +676,14 @@ void NeuralNetwork::remakeInputDataset(){
                 }
 
                 //int indexs = std::distance(meanToTModSec.begin(), ps);
-                for (size_t s = 0; s < outShapeLength; s++){
+                for (size_t s = 0; s < 2*outShapeLength; s++){
                     ofNN << " " << meanToTModSec[run][s];
                 }
+                //for (size_t s = outShapeLength; s < 2*outShapeLength; s++){
+                //    ofNN << " " << meanToTModSec[run][s];   // errors of target
+                //}
                 ofNN << endl;
+                runsWritten+=1;
             }
         }
         ofNN.close();
@@ -540,6 +691,8 @@ void NeuralNetwork::remakeInputDataset(){
 
 
     /// _____   DRAWING
+    if (!draw)
+        return runsWritten;
     dbPars[0] = timeVectToDateNumbers(dbPars[0] );
     meanToT[0]= timeVectToDateNumbers(meanToT[0]);
     meanToTAll[0]= timeVectToDateNumbers(meanToTAll[0]);
@@ -581,7 +734,7 @@ void NeuralNetwork::remakeInputDataset(){
 
     /// Check for stability of the calibration depending on selection criteria
     //drawTargetSectorComparison();
-    //drawTargetDimensionsComp(meanToTModSec, outShape);
+    //TCanvas* cnvs = drawTargetDimensionsComp(meanToTModSec, outShape);
 
     //drawTargetStability(grClbAll,grClb,grClbHH);
 
@@ -593,6 +746,8 @@ void NeuralNetwork::remakeInputDataset(){
     //auto legend = new TLegend(0.1,0.7,0.48,0.9);
     //legend->AddEntry("grClb","ToT from pp HF","lp");
     //legend->Draw();
+
+    return runsWritten;
 }
 
 vector<float> NeuralNetwork::formNNInput(vector<double> db, vector<double> tr){
@@ -614,7 +769,7 @@ vector<float> NeuralNetwork::formNNInput(vector<double> db, vector<double> tr){
 
 vector<float> NeuralNetwork::formNNInput(vector<double> db){
 
-    vector<float> nnInpPars;
+    vector<float> nnInpPars; // nodes * inChan
     for (size_t i = 0; i < db.size(); i++){
         double x = db[i];
         if (std::find(additionalFilter.begin(), additionalFilter.end(), i) == additionalFilter.end())
