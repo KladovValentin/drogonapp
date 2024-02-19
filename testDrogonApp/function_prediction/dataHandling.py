@@ -189,6 +189,7 @@ def load_dataset(config, dataTable):
         y = dfn[:, -1].astype(np.float32)
 
     # for each entry (x[i]) -> x[i][-1] = (7,24) -> if (x[i][-j-2] - x[i][-1] > 4)
+    
     """
     listt = list()
     for i in range(x.shape[0]):
@@ -199,10 +200,11 @@ def load_dataset(config, dataTable):
                     if (np.abs(x[i][j][k][l] - x[i][-j-2][k][l]) < 0.5):
                         continue
                     x[i][-j-2][k][l] = x[i][-j-2+1][k][l]
+
+    """
+    """
     data = np.array(listt)
     hist, bins = np.histogram(data, bins=100)
-    """
-    """
     plt.figure(figsize=(8, 6))
     plt.hist(data, bins=bins, color='skyblue', edgecolor='black')  # Plot the histogram
     plt.title('Histogram of Random Data')
@@ -321,8 +323,8 @@ class DataManager():
         dftCorr = self.getDataset(self.mainPath + "nn_input/outNNTestSMzxc.dat", "simLabel")
         #print(dftCorr)
 
-        dftTV = dftCorr.iloc[:int(dftCorr.shape[0]*0.7)].copy()
-        dftTrainV = dftTV.iloc[:int(dftTV.shape[0]*0.9)].copy()
+        dftTV = dftCorr.iloc[:int(dftCorr.shape[0]*0.1)].copy()
+        dftTrainV = dftTV.iloc[:int(dftTV.shape[0]*0.5)].copy()
         dftTest = dftTV.drop(dftTrainV.index)
         dftCorr = dftTrainV.copy()
 

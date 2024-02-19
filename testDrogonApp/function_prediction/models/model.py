@@ -486,7 +486,7 @@ class GCNLSTM(torch.nn.Module):
             #print(hidden_l[0].shape,newTensor.shape, result_tensor.shape)
         result_tensor = torch.cat(output_list1, dim=1)
         
-        newTensor11 = self.linear(embedded.reshape((batch_size*sentence_length,self.nodes, self.hidden_size))).reshape((batch_size, sentence_length, self.nodes))
+        #newTensor11 = self.linear(embedded.reshape((batch_size*sentence_length,self.nodes, self.hidden_size))).reshape((batch_size, sentence_length, self.nodes))
 
         #print(e_i.shape)
         #print(e_a.shape)
@@ -494,7 +494,7 @@ class GCNLSTM(torch.nn.Module):
         #print(tempResult.shape)
 
         # result shape: (batch,sentence,nodes)
-        return newTensor11
+        return result_tensor
 
 
 
