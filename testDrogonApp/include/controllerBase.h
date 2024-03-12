@@ -20,6 +20,8 @@ class ControllerBase {
     private:
         vector<float> runningNnInpTens;
         int sentenceLength;
+        int nodesLength;
+        int inChannelsLength;
 
         TFile* out ;  // pointer to outputfile
         TH1F* hTriggerDataTime;
@@ -55,6 +57,10 @@ class ControllerBase {
         void changeRunList();
         
         void writeData();
+
+        int getSentenceLength() { return sentenceLength; }
+        int getNodesLength() { return nodesLength; }
+        int getInChannelsLength() { return inChannelsLength; }
 
 };
 

@@ -32,17 +32,25 @@ ControllerBase::ControllerBase(){
     serverData->setContinuousPredictionRunning(true);
 
     sentenceLength = 5;
+    nodesLength = 24;
+    inChannelsLength = 7;
 
-    out = new TFile("outHome.root","RECREATE");
-    out->cd();
+    //out = new TFile("outHome.root","RECREATE");
+    //out->cd();
 
     hTriggerDataTime = new TH1F("hTriggerDataTime", "trigger data reading time; t, ms; counts", 100, 0, 500);
-    hEpicsDataTime = new TH1F("hEpicsDataTime", "epics data reading time; t, ms; counts", 100, 0, 500);
-    hNetworkDataTime = new TH1F("hNetworkDataTime", "NN prediction calculation time; t, ms; counts", 100, 0, 10);
+    hEpicsDataTime = new TH1F("hEpicsDataTime", "epics data reading time; t, ms; counts", 250, 0, 5000);
+    hNetworkDataTime = new TH1F("hNetworkDataTime", "NN prediction calculation time; t, ms; counts", 200, 0, 2000);
 
 }
 
 ControllerBase::~ControllerBase(){
+    out = new TFile("outHome.root","RECREATE");
+    out->cd();
+    hTriggerDataTime->Write();
+    hEpicsDataTime->Write();
+    hNetworkDataTime->Write();
+    out->Save();
     out->Close();
 }
 
@@ -345,8 +353,11 @@ vector<float> ControllerBase::moveForwardCurrentNNInput(){
     long long elapsed3 = 0;
     long long elapsed4 = 0;
     long long elapsed5 = 0;
-    if (currentNNInput.size() < sentenceLength){
+    //cout << "curr " << currentNNInput.size() << endl;
+    if (currentNNInput.size() < nodesLength*inChannelsLength*sentenceLength){
         currentNNInput = makeNNInputTensor(currentRun);
+        currentRunIndex = currentRunIndex+1;
+        currentRun = nextRun;
         //if (currentNNInput.size() < sentenceLength)
         //    return -3;
     }
@@ -365,13 +376,21 @@ vector<float> ControllerBase::moveForwardCurrentNNInput(){
 
         //vector<float> nnInpPars = neuralNetwork->formNNInput(epicsManager->getDBdata(currentRun, nextRun), trPars);
         vector<double> dbData = epicsManager->getDBdata(currentRun, nextRun);
-        cout << "appending table" << endl;
+        //cout << "appending table" << endl;
         epicsManager->appendDBTable("app", currentRun, dbData);
         vector<float> nnInpPars = neuralNetwork->formNNInput(dbData);
+        //cout << "subs " << dbData.size() << "   " << nnInpPars.size() << endl;
         currentNNInput.erase(currentNNInput.begin(), currentNNInput.begin() + nnInpPars.size());
         for (size_t i = 0; i < nnInpPars.size(); i++){
             currentNNInput.push_back(nnInpPars[i]);
         }
+
+        //cout << "run: " << currentRun << endl;
+        //cout << "dbdata ";
+        //for (size_t i = 0; i < dbData.size(); i++){
+        //    cout << dbData[i] << ", ";
+        //}
+        //cout << endl;
 
         currentRunIndex = currentRunIndex+1;
         currentRun = nextRun;
@@ -382,6 +401,13 @@ vector<float> ControllerBase::moveForwardCurrentNNInput(){
 
     serverData->setCurrentNNInput(currentNNInput);
     serverData->setCurrentRunIndex(currentRunIndex);
+
+    //cout << "Input full ";
+    //for (size_t i = 0; i < currentNNInput.size(); i++){
+    //    cout << currentNNInput[i] << ", ";
+    //}
+    //cout << endl;
+    
     vector<float> output = neuralNetwork->getPrediction(currentNNInput);  //nodes length vector as output
     
     auto elapsed6 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count();
@@ -524,11 +550,13 @@ void ControllerBase::changeRunList(){
 
 
 void ControllerBase::writeData(){
+    out = new TFile("outHome.root","RECREATE");
     out->cd();
     hTriggerDataTime->Write();
     hEpicsDataTime->Write();
     hNetworkDataTime->Write();
     out->Save();
     out->Close();
+    //out->Close();
 }
 

@@ -2,7 +2,10 @@
 import torch
 import numpy as np
 from models.model import GCNLSTM
+from dataHandling import readTrainData
+import time
 
+mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
 
 def loadModel(input_dim, path):
     nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1)
@@ -12,16 +15,40 @@ def loadModel(input_dim, path):
     return nn_model
 
 
+def normalizeSingleInput(input):
+        #print(input)
+        pathFP = mainPath + 'function_prediction/'
+        meanValues, stdValues = readTrainData(pathFP,"")
+
+        features = input.shape[2]
+        nodes = input.shape[3]
+
+        for i in range(features):
+            for j in range(nodes):
+                if (stdValues[i*nodes+j]!=0):
+                    input[:,:,i,j] = (input[:,:,i,j]-meanValues[i*nodes+j])/stdValues[i*nodes+j]
+                else:
+                    input[:,:,i,j] = (input[:,:,i,j]-meanValues[i*nodes+j])/1
+        #print(input)
+        return input
+
 
 def makeSinglePrediction(input):
+    from config import Config
+    config = Config()
+    sentenceLength = config.sentenceLength
+    cellsLength = config.cellsLength
+    channelsLength = config.channelsLength
+
     mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
     path = mainPath+"function_prediction/"
 
+    #print("python input")
     #print(input)
 
     # input = list -> torch.tensor(1,sentence,channels,nodes)
     inpvect = np.array(input)
-    inpvect = inpvect.reshape((1,5,7,24)).astype(np.float32)
+    inpvect = inpvect.reshape((1,sentenceLength,channelsLength,cellsLength)).astype(np.float32)
     inptens = torch.tensor(inpvect)
 
     input_dim = inptens[0].shape
@@ -30,10 +57,20 @@ def makeSinglePrediction(input):
     nn_model = loadModel(input_dim, path)
     nn_model.eval()
 
+    inptens = normalizeSingleInput(inptens)
+    pathFP = mainPath + 'function_prediction/'
+    meanValues, stdValues = readTrainData(pathFP,"")
+    start_time = time.time()
     singtp = (nn_model(inptens).detach().numpy())[:,-1,:]    #(batch,sentence,nodes)->(batch,nodes)
-    #for i in range(24):
-    #    singtp[:,i] = singtp[:,i]*std[-24+i] + mean[-24+i]
-    #print(singtp)
+    end_time = time.time()
+
+    with open(path+"elapsed_times.txt","a") as file:
+        file.write(str(end_time-start_time)+"\n")
+
+    #print("python output:")
+    for i in range(cellsLength):
+        singtp[:,i] = singtp[:,i]*stdValues[-2*cellsLength+i] + meanValues[-2*cellsLength+i]
+    #print(singtp[0])
 
     return singtp[0].tolist()
 

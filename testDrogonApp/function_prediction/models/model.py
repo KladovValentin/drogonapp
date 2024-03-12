@@ -490,7 +490,7 @@ class GCNLSTM(torch.nn.Module):
 
         #print(e_i.shape)
         #print(e_a.shape)
-        print(result_tensor.shape)
+        #print(result_tensor.shape)
         #print(tempResult.shape)
 
         # result shape: (batch,sentence,nodes)

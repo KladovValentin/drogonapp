@@ -38,7 +38,7 @@ HistsUpdater::HistsUpdater(int argc, char** argv, std::shared_ptr<ControllerBase
     predictionVsTargetGraph->SetName("predictionVsTargetGraph");
     targetsPredictions = new TGraph();
     targetsPredictions->SetName("targetsPredictions");
-    for (size_t i = 0; i < 24; i++){
+    for (size_t i = 0; i < controllerBase->getNodesLength(); i++){
         predictionGraphNodes[i] = new TGraph();
         predictionGraphNodes[i]->SetName(Form("predictionGraphNodes_%d",(int)i));
         targetsGtaphNodes[i] = new TGraphErrors();
@@ -65,7 +65,7 @@ HistsUpdater::~HistsUpdater(){
 }
 
 void HistsUpdater::updateTrainingCheckGraph(){
-    int nodes = 24;
+    int nodes = controllerBase->getNodesLength();
     ifstream fin2;
 	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModNew.dat").c_str());
     std::map<int, vector<double> > targetsMap;
@@ -145,7 +145,7 @@ void HistsUpdater::updateHists(vector< pair<int, vector<float> > > newPrediction
             for (size_t i = 0; i < entry.second.size(); i++)
                 predictionGraphNodes[i]->SetPoint(predictionGraphNodes[i]->GetN(),(double)(entry.first),(double)(entry.second[i]));
         }
-        for (size_t i = 0; i < 24; i++){
+        for (size_t i = 0; i < controllerBase->getNodesLength(); i++){
 
             TGraph *existingGraph = dynamic_cast<TGraph*>(dirNodesPred->Get(predictionGraphNodes[i]->GetName()));
             if (predictionGraphNodes[i]->GetN() > 0){
@@ -183,7 +183,7 @@ void HistsUpdater::updateHists(vector< pair<int, vector<float> > > newPrediction
 
 void HistsUpdater::updateTargetGraphs(){
     TFile* qaHists = new TFile((saveLocation+"qaHists/qahists.root").c_str(),"UPDATE");
-    size_t nodesSize = 24;
+    size_t nodesSize = controllerBase->getNodesLength();
     /// Read run-mean file with targets vs run
     ifstream fin2;
 	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModzxc.dat").c_str());
@@ -352,7 +352,7 @@ int HistsUpdater::updateMainCicle(){
         //cout << "new settings checked" << endl;
 
 
-        /// Check new files (runs) available
+        /// Check low amount of new runs
         vector<int> currentRunList = dateRunF::loadrunlist(0,1e9);
         if (currentRunList.size() == 0){
             maxRun = 0;
@@ -387,6 +387,8 @@ int HistsUpdater::updateMainCicle(){
         //lastPredRunIndex = -1;
         //lastPredRunIndex = currentRunList.size()-5;
 
+
+        /// Finding new runs based on the maxRun from lastPredicted or from the last loop entry
         int maxRunNew = currentRunList[currentRunList.size()-1];
         auto it1 = std::find(currentRunList.begin(), currentRunList.end(), maxRun);
         auto it2 = std::find(currentRunList.begin(), currentRunList.end(), maxRunNew);
@@ -414,12 +416,20 @@ int HistsUpdater::updateMainCicle(){
                 newPredictions.push_back(make_pair(newRun,newPrediction));
                 cout << "prediction is made for run " << newRun << endl;
                 //cin.get();
-            }
 
-            ofstream fout;
-            fout.open((saveLocation + "testOut.txt").c_str(),std::ios::app);
-            fout << "predicted" << endl;
-            fout.close();
+                retrainCounter += 1;
+                if (retrainCounter >= 10){
+                    controllerBase->writeData();
+                    updateTargetGraphs();
+                    retrainCounter = 0;
+                    //int trainRunsAmount = controllerBase->neuralNetwork->remakeInputDataset(false);
+                    //cout << "trainRunsAmount = " << trainRunsAmount << endl;
+                    //if (trainRunsAmount >= 50){
+                    //    std::system("xterm -e python3 /home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/function_prediction/trainClassificationTemplate.py > ~/outputTrain.log 2>&1 &");
+                    //}
+                }
+
+            }
 
             //std::this_thread::sleep_for(std::chrono::seconds(10));
         }
@@ -433,35 +443,35 @@ int HistsUpdater::updateMainCicle(){
                 vector<double> dbData = controllerBase->epicsManager->getDBdata(startRuntt, newRunNumbers[i]);
                 cout << "filling epics table with startrun = " << startRuntt << endl;
                 controllerBase->epicsManager->appendDBTable("app", startRuntt, dbData);
+                retrainCounter += 1;
             }
         }
 
         updateProcessedRunList(newRunNumbers);
         updateHists(newPredictions);
 
-        lastPredRun = currentRunList[currentRunList.size()-2];
+        //lastPredRun = currentRunList[currentRunList.size()-2];
         lastPredRunIndex = currentRunList.size()-2;
         maxRun = currentRunList[currentRunList.size()-1];
         maxRunIndex = currentRunList.size()-1;
 
-        retrainCounter += newRunNumbers.size();
-        cout << retrainCounter << endl;
-        if (retrainCounter >= 10){
-            cout << "ASDASDASKHJDHSALDKBAHSFJLHASJFLSAFJK" << endl;
+        //retrainCounter += newRunNumbers.size();
+        //cout << retrainCounter << endl;
+        if (retrainCounter >= 500){
             /// Update a graph/s with targets? To be able to compare to previously made predictions
             updateTargetGraphs();
 
             /// Launch retraining in xterm
             retrainCounter = 0;
-            //int trainRunsAmount = controllerBase->neuralNetwork->remakeInputDataset(true);
-            //cout << "trainRunsAmount = " << trainRunsAmount << endl;
-            //if (trainRunsAmount >= 10){
-            //    std::system("xterm -e python3 /home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/function_prediction/trainClassificationTemplate.py > ~/outputTrain.log 2>&1 &");
-            //}
+            int trainRunsAmount = controllerBase->neuralNetwork->remakeInputDataset(false);
+            cout << "trainRunsAmount = " << trainRunsAmount << endl;
+            if (trainRunsAmount >= 50){
+                std::system("xterm -e python3 /home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/function_prediction/trainClassificationTemplate.py > ~/outputTrain.log 2>&1 &");
+            }
             //scin.get();
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     return 1;
 }

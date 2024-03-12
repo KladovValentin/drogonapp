@@ -1,1 +1,12 @@
 *parquet
+predicted**.txt
+*.root
+*.pcm
+runlist*
+runs*
+elapsed*
+
+testDrogonApp/serverData/info_tables/*
+testDrogonApp/serverData/histLists/*
+testDrogonApp/serverData/nn_input/*
+testDrogonApp/serverData/function_prediction/prediction/*

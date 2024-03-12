@@ -66,6 +66,7 @@
         "thread": "cpp",
         "typeinfo": "cpp",
         "iomanip": "cpp",
-        "codecvt": "cpp"
+        "codecvt": "cpp",
+        "cinttypes": "cpp"
     }
 }

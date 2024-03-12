@@ -4,6 +4,8 @@
 #include "../include/functions.h"
 #include "../include/constants.h"
 
+#include <iomanip>
+
 using namespace std;
 using namespace preTrainFunctions;
 using namespace vectorFunctions;
@@ -66,14 +68,33 @@ void NeuralNetwork::setupNNPredictions(){
 }
 
 
-PyObject* vectorToPyList(const std::vector<float>& vec) {
-    PyObject* pyList = PyList_New(vec.size());
+PyObject* vectorToPyList(vector<float> vec) {
+    vector<double> vecDouble;
+    for (size_t i = 0; i < vec.size(); i++){
+        vecDouble.push_back((double)vec[i]);
+    }
+    for (size_t i = 0; i < vecDouble.size(); i++){
+        int digAbove = 0;
+        if (vecDouble[i] != 0) {
+            digAbove = static_cast<int>(std::log10(std::abs((int)vecDouble[i]))) + 1;
+        }
+        int powerCheck = 6-digAbove;
+        vecDouble[i] = (int)(vecDouble[i]*pow(10,5))/pow(10,5);
+    }
+
+    //cout << "Double Input ";
+    //for (size_t i = 0; i < vecDouble.size(); i++){
+    //    cout << std::fixed << std::setprecision(5) << vecDouble[i] << ", ";
+    //}
+    cout << endl;
+
+    PyObject* pyList = PyList_New(vecDouble.size());
     if (!pyList) {
         PyErr_Print();
         return NULL;
     }
     for (size_t i = 0; i < vec.size(); ++i) {
-        PyObject* item = PyFloat_FromDouble(static_cast<double>(vec[i]));
+        PyObject* item = PyFloat_FromDouble(vecDouble[i]);
         if (!item) {
             Py_DECREF(pyList);
             PyErr_Print();
@@ -120,14 +141,11 @@ vector<float> NeuralNetwork::getRawPredictionPython(vector<float> normalizedInpu
         }
         Py_DECREF(sysModule);
     }
-    cout << "a" << endl;
     PyObject* pModule = PyImport_ImportModule("makePrediction");
-    cout << "b" << endl;
     if (!pModule) {
         PyErr_Print();
         //return 1;
     }
-    cout << "c" << endl;
 
     // Get references to the Python functions
     PyObject* pFirstFunc = PyObject_GetAttrString(pModule, "makeSinglePrediction");
@@ -149,10 +167,10 @@ vector<float> NeuralNetwork::getRawPredictionPython(vector<float> normalizedInpu
 
     // Convert the result to a vector<float>
     std::vector<float> outputVec = pyListToVector(pResult);
-    for (const auto& value : outputVec) {
-        std::cout << value << " ";
-    }
-    std::cout << std::endl;
+    //for (const auto& value : outputVec) {
+    //    std::cout << value << " ";
+    //}
+    //std::cout << std::endl;
 
     // Clean up
     Py_DECREF(pModule);
@@ -166,33 +184,35 @@ vector<float> NeuralNetwork::getRawPredictionPython(vector<float> normalizedInpu
 }
 
 vector<float> NeuralNetwork::getPrediction(vector<float> inputTensorValues){
-    int sentenceLength = 5;
-    int inChannels = 7;
-    int nodesLength = 24;
-    int fullLength = sentenceLength * nodesLength * inChannels;
-    if (fullLength != inputTensorValues.size()) 
-        cout << fullLength << " " << inputTensorValues.size() << endl;
+    //int sentenceLength = 5;
+    //int inChannels = 7;
+    //int nodesLength = 24;
+    //int fullLength = sentenceLength * nodesLength * inChannels;
+    //if (fullLength != inputTensorValues.size()) 
+    //    cout << fullLength << " " << inputTensorValues.size() << endl;
 
-    for (size_t i = 0; i < sentenceLength; i++){
-        for (size_t j = 0; j < inChannels; j++){
-            for (size_t k = 0; k < nodesLength; k++){
-                if (stdValues[j*nodesLength+k] != 0)
-                    inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k] = (float)((inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k]-meanValues[j*nodesLength+k])/stdValues[j*nodesLength+k]);
-                else
-                    inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k] = (float)((inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k]-meanValues[j*nodesLength+k])/1);
-            }
-        }
-    }
+    //for (float x: inputTensorValues){ cout << ", " << x;} cout << endl << endl;
+
+    //for (size_t i = 0; i < sentenceLength; i++){
+    //    for (size_t j = 0; j < inChannels; j++){
+    //        for (size_t k = 0; k < nodesLength; k++){
+                //if (stdValues[j*nodesLength+k] != 0)
+                    //inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k] = (float)((inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k]-meanValues[j*nodesLength+k])/stdValues[j*nodesLength+k]);
+                //else
+                    //inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k] = (float)((inputTensorValues[i*inChannels*nodesLength+j*nodesLength+k]-meanValues[j*nodesLength+k])/1);
+    //        }
+    //    }
+    //}
 
     //for (float x: inputTensorValues){ cout << ", " << x;} cout << endl << endl << endl;
     
-    
+    vector<float> inp = {-0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, 1.15, 1.19213, 1.28335, 1.69697, 1.50619, 1.43025, 0.114225, 1.2106, 0.557263, 0, 0, -0.577436, 1.20882, 1.2026, 1.11423, 0.922802, 1.2895, 1.31063, 1.86656, 1.04046, 1.25881, -0.913003, 1.24629, 1.23368, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, 1.15, 1.19213, 1.28335, 1.69697, 1.50619, 1.43025, 0.114225, 1.2106, 0.557263, 0, 0, -0.577436, 1.20882, 1.2026, 1.11423, 0.922802, 1.2895, 1.31063, 1.86656, 1.04046, 1.25881, -0.913003, 1.24629, 1.23368, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, 1.15, 1.19213, 1.28335, 1.69697, 1.50619, 1.43025, 0.114225, 1.2106, 0.557263, 0, 0, -0.577436, 1.20882, 1.2026, 1.11423, 0.922802, 1.2895, 1.31063, 1.86656, 1.04046, 1.25881, -0.913003, 1.24629, 1.23368, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, 1.01647, 1.22912, 1.08716, 1.45236, 1.41305, 1.36161, 0.124045, 1.14602, 0.576243, 0, 0, -0.649008, 1.21491, 1.2118, 1.10974, 0.907692, 1.3059, 1.28224, 1.83982, 1.02719, 1.25147, -0.889066, 1.2379, 1.2288, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, 1.11889, 1.24665, 1.2449, 1.48192, 1.58487, 1.47091, 0.0309097, 1.2089, 0.552984, 0, 0, -0.623491, 1.21062, 1.21796, 1.11977, 0.892438, 1.29838, 1.28405, 1.823, 1.0153, 1.25138, -0.945185, 1.2379, 1.2335, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924};
     vector<float> outputTensorValues = getRawPredictionPython(inputTensorValues);
 
-    const char* mInputName[] = {"input"};
-    const char* mOutputName[] = {"output"};
-    Ort::MemoryInfo memoryInfo = Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtDeviceAllocator, OrtMemType::OrtMemTypeCPU);
-    Ort::Value inputTensor = Ort::Value::CreateTensor<float>(memoryInfo, inputTensorValues.data(),inputTensorSize,mInputDims.data(),mInputDims.size());
+    //const char* mInputName[] = {"input"};
+    //const char* mOutputName[] = {"output"};
+    //Ort::MemoryInfo memoryInfo = Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtDeviceAllocator, OrtMemType::OrtMemTypeCPU);
+    //Ort::Value inputTensor = Ort::Value::CreateTensor<float>(memoryInfo, inputTensorValues.data(),inputTensorSize,mInputDims.data(),mInputDims.size());
     //vector<float> outputTensorValues(outputTensorSize);
     //Ort::Value outputTensor = Ort::Value::CreateTensor<float>(memoryInfo, outputTensorValues.data(), outputTensorSize,mOutputDims.data(), mOutputDims.size());
     //mSession->Run(Ort::RunOptions{nullptr}, mInputName,&inputTensor, 1, mOutputName,&outputTensor, 1);
@@ -211,16 +231,20 @@ vector<float> NeuralNetwork::getPrediction(vector<float> inputTensorValues){
     //    outputProbs.push_back(outputTensorValues[i]);
     //cout << "output size is " << outputTensorValues.size() << " " << inputTensorSize << endl;
 
-    vector<float> result;
-    for (size_t i = 0; i < nodesLength; i ++){
-        //cout << outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i] << endl;
+    vector<float> result = outputTensorValues;
+    //for (size_t i = 0; i < nodesLength; i++){
+        //cout << outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-2*nodesLength+i] + meanValues[meanValues.size()-2*nodesLength+i] << ", ";
         //cout << outputTensorValues[outputTensorValues.size()-nodesLength+i] << endl;
         //cout << outputTensorValues[(i+1)*sentenceLength-1]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i] << endl;
         //cout <<          outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i] << endl;
         //result.push_back(outputTensorValues[(i+1)*sentenceLength-1]*stdValues[stdValues.size()-nodesLength+i] + meanValues[meanValues.size()-nodesLength+i]);
         //result.push_back(outputTensorValues[(i+1)*sentenceLength-1]);
-        result.push_back(outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-2*nodesLength+i] + meanValues[meanValues.size()-2*nodesLength+i]);
-    }
+        //result.push_back(outputTensorValues[outputTensorValues.size()-nodesLength+i]*stdValues[stdValues.size()-2*nodesLength+i] + meanValues[meanValues.size()-2*nodesLength+i]);
+    //    result.push_back(outputTensorValues[i]);
+    //}
+    //cout << "result " << result[0] << endl;
+    //for (float x: result){ cout << ", " << x;} cout << endl << endl;
+    //cout << endl;
     return result;
     //return outputTensorValues[outputTensorValues.size()-1]*stdValues[stdValues.size()-1] + meanValues[meanValues.size()-1];
 }
@@ -584,8 +608,10 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     //vector< pair< string, vector<double> > > table = readDBTableFromFile(saveLocation+"info_tables/MDCALL1.dat");
     cout << "starting reading tables" << endl;
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL.dat");
-    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");/
-    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1.dat");
+    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");
+    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1.dat");
+    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSecPrecise.dat");
+    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1zxc.dat");
     cout << "a" << endl;
     vector< pair< int, vector<double> > > tableTrig = readClbTableFromFile(saveLocation+"info_tables/trigger_data2.dat");
     cout << "b" << endl;
@@ -607,6 +633,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     vector< pair< int, vector<double> > > tableClbAllSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModNew.dat");
     vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModzxc.dat");
+    //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModPrecise.dat");
     cout << "d" << endl;
     std::map< int, vector<double> > meanToTModSec = clbTableToVectorsTarget(tableClbModSec, outShape);
 
@@ -655,7 +682,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     bool writeFile = true;
     if (writeFile){
         ofstream ofNN;
-        ofNN.open(saveLocation+"nn_input/outNNTestSMzxc.dat"); //Test1
+        ofNN.open(saveLocation+"nn_input/outNNTestSMzxcTest.dat"); //Test1
         for (auto entry: meanToTModSec){
             int run = entry.first;
             auto p = std::find(dbPars[0].begin(), dbPars[0].end(), (double)run);
@@ -667,20 +694,20 @@ int NeuralNetwork::remakeInputDataset(bool draw){
                 int index = std::distance(dbPars[0].begin(), p);
                 for (size_t j = 0; j<dbPars.size()-1; j++){
                     if (std::find(additionalFilter.begin(), additionalFilter.end(), j) == additionalFilter.end())
-                        ofNN << " " << dbPars[j+1][index];
+                        ofNN << " " << std::fixed << std::setprecision(5) << dbPars[j+1][index];
                 }
 
-                int indext = std::distance(triggPars[0].begin(), pt);
-                for (size_t j = 0; j<triggPars.size()-1; j++){
-                    //ofNN << " " << triggPars[j+1][indext];
-                }
+                //int indext = std::distance(triggPars[0].begin(), pt);
+                //for (size_t j = 0; j<triggPars.size()-1; j++){
+                    //ofNN << " " << std::fixed << std::setprecision(5) << triggPars[j+1][indext];
+                //}
 
                 //int indexs = std::distance(meanToTModSec.begin(), ps);
                 for (size_t s = 0; s < 2*outShapeLength; s++){
-                    ofNN << " " << meanToTModSec[run][s];
+                    ofNN << " " << std::fixed << std::setprecision(7) << meanToTModSec[run][s];
                 }
                 //for (size_t s = outShapeLength; s < 2*outShapeLength; s++){
-                //    ofNN << " " << meanToTModSec[run][s];   // errors of target
+                //    ofNN << " " << std::fixed << std::setprecision(7) << meanToTModSec[run][s];   // errors of target
                 //}
                 ofNN << endl;
                 runsWritten+=1;

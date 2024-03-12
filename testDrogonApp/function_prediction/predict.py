@@ -123,9 +123,9 @@ def makePredicionList(config, experiment_path, savePath, path):
     inpvect = inpvect.reshape((1,5,7,24)).astype(np.float32)
     inptens = torch.tensor(inpvect)
     singtp = (nn_model(inptens).detach().numpy())[:,-1,:]
-    #for i in range(24):
-    #    singtp[:,i] = singtp[:,i]*std[-24+i] + mean[-24+i]
-    #print(singtp)
+    for i in range(24):
+        singtp[:,i] = singtp[:,i]*std[-2*24+i] + mean[-2*24+i]
+    print(singtp)
     print("")
     print("")
     for i_step, (x, y) in enumerate(tepoch):
@@ -203,25 +203,32 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
     print(dftable)
     
     # Get length of spacial dimension (e.g. number of channels). Can be changed
-    chLength = int(len(dftable.columns)/2)
+    chLength = int(len(dftable.columns)/3)
 
     indexes = dftable[list(dftable.columns)[0]].to_numpy()
     indexes2 = dftable2[list(dftable2.columns)[0]].to_numpy()
     nptable = dftable.to_numpy()
     nptable2 = dftable2.to_numpy()
 
+
     mean, std = readTrainData(path,"")
     for i in range(1):
         i = i
         # Get difference target-prediction in terms of sigma (std) for train and test parts
-        #nptable[:,i+1+chLength] = (nptable[:,i+1+chLength] - nptable[:,i+1])/std[-chLength+i]
-        #nptable2[:,i+1+chLength] = (nptable2[:,i+1+chLength] - nptable2[:,i+1])/std[-chLength+i]
+        #nptable[:,i+1+2*chLength] = (nptable[:,i+1+2*chLength] - nptable[:,i+1])/nptable[:,i+1+chLength]
+        #nptable2[:,i+1+2*chLength] = (nptable2[:,i+1+2*chLength] - nptable2[:,i+1])/nptable2[:,i+1+chLength]
 
         plt.plot(indexes, nptable[:,i+1], color='#0504aa', label = 'target test'+str(i), marker='o', linestyle="None", markersize=0.8)
-        plt.plot(indexes, nptable[:,i+1+chLength], color='#8b2522', label = 'prediction test'+str(i), marker='o', linestyle="None", markersize=1.7)
+        plt.plot(indexes, nptable[:,i+1+2*chLength], color='#8b2522', label = 'prediction test'+str(i), marker='o', linestyle="None", markersize=1.7)
         plt.plot(indexes2, nptable2[:,i+1], color='#0504aa', label = 'target train'+str(i), marker='o', linestyle="None", markersize=0.8)
-        plt.plot(indexes2, nptable2[:,i+1+chLength], color='#228B22', label = 'prediction train'+str(i), marker='o', linestyle="None", markersize=1.7)
+        plt.plot(indexes2, nptable2[:,i+1+2*chLength], color='#228B22', label = 'prediction train'+str(i), marker='o', linestyle="None", markersize=1.7)
     
+
+    #with open("testPred.txt","a") as file:
+    #    for i in range(indexes.size):
+    #        for j in range(24):
+    #            file.write(indexes[i]+" "+nptable[i,j+1+chLength]+"\n")
+
     #plt.legend(loc=[0.6,0.8])
     #plt.ylim(4, 7.5)
     plt.grid(axis='y', alpha=0.75)
@@ -252,8 +259,8 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     localCNames = list(dftCorrExp.columns)
     for i in range(len(localCNames)-1-2*nNodes):
         dftCorrExp.drop(localCNames[i+1],axis=1,inplace=True)
-    for i in range(nNodes):
-        dftCorrExp.drop(localCNames[len(localCNames) -i -1],axis=1,inplace=True)
+    #for i in range(nNodes):
+    #    dftCorrExp.drop(localCNames[len(localCNames) -i -1],axis=1,inplace=True)
     dftCorrExp = dftCorrExp.join(pT[list(pT.columns)])
 
 
@@ -264,8 +271,8 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     localCNames = list(dftCorrExpS.columns)
     for i in range(len(localCNames)-1-2*nNodes):
         dftCorrExpS.drop(localCNames[i+1],axis=1,inplace=True)
-    for i in range(nNodes):  
-        dftCorrExpS.drop(localCNames[len(localCNames) - i -1],axis=1,inplace=True)
+    #for i in range(nNodes):  
+    #    dftCorrExpS.drop(localCNames[len(localCNames) - i -1],axis=1,inplace=True)
     dftCorrExpS = dftCorrExpS.join(pTS[list(pTS.columns)])
     print(dftCorrExpS)
 
@@ -282,11 +289,16 @@ def predict_nn(fName, oName, path):
 
     #write_output(predictionList,mod,enlist)
 
+def predict_cicle(testNum):
+    predict_nn("tesu",'predicted1_'+str(testNum), path)
+    predict_nn("simu",'predicted_'+str(testNum), path)
+
 mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
 path = mainPath+"function_prediction/"
 
 #print("start python predict")
-predict_nn("tesu",'predicted1', path)
-predict_nn("simu",'predicted', path)
-analyseOutput(path+"predicted1",path+"tesu", path+"predicted",path+"simu")
+#test = 9
+#predict_nn("tesu",'predicted1_'+str(test), path)
+#predict_nn("simu",'predicted_'+str(test), path)
+#analyseOutput(path+"predicted1_"+str(test),path+"tesu", path+"predicted_"+str(test),path+"simu")
 #analyseOutput(path+"predictedSim.parquet",path+"simu.parquet")

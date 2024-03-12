@@ -21,6 +21,7 @@ from models.model import LSTM
 from models.model import Conv2dLSTM
 from models.model import GCNLSTM
 from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset
+from predict import predict_cicle
 
 
 """
@@ -99,7 +100,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
 
             #running_loss = loss(prediction[:,14,:], y[:,14,:])
             #print(y[0])
-            running_loss = loss(prediction, y)
+            running_loss = loss(prediction, y[:,:,0,:])
             optimizer.zero_grad()
             running_loss.backward()
             optimizer.step()
@@ -133,7 +134,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
         with torch.no_grad():
             for v_step, (x, y)  in enumerate(valid_loader):
                 prediction = model(x)
-                validLosses.append(float(loss(prediction, y)))
+                validLosses.append(float(loss(prediction, y[:,:,0,:])))
 
                 yAccTest = y[:,:,0,:]
                 fullYAmount = yAccTest.shape[0]
@@ -176,27 +177,32 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
     
     return accuracy_valid
 
-def train_NN(mainPath, simulation_path="simu.parquet"):
+def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
     from config import Config
     config = Config()
     print("start nn training")
+
+    transferTraining = transfer
+
+    datasetMod = "train_nn"
+    if (transferTraining):
+        datasetMod = "test_nn"   #keep mean and std from before
+    dataManager.manageDataset(datasetMod,ind)
     
     f = open(mainPath+"function_prediction/trainresults1.txt", "w")
 
     for i in range(1):
         batch_size, lr, nNeurons, nLayers, weight_decay = varyHyperparameters()
         print(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay))
-
-        transferTraining = False
         
-        batch_size = 50000 #512
+        batch_size = 256 #50000 #512
         weight_decay = 0.0
         lr = 0.01
-        epochs = 150
+        epochs = 120
         if (transferTraining):
             lr = 0.001
             epochs = 20
-            weight_decay = 0.04
+            weight_decay = 0.00
         nLayers = 3
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
@@ -216,11 +222,19 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
         if (config.modelType == "gConvLSTM"):
             xt, yt, e_i, e_a = load_dataset(config,dataTable)
             xv, yv, _, _ = load_dataset(config,validTable)
+            shuffled_indicest = np.random.permutation(xt.shape[0])
+            xt = xt[shuffled_indicest]
+            yt = yt[shuffled_indicest]
             train_dataset = My_dataset((xt,yt))
             valid_dataset = My_dataset((xv,yv))
         else:
-            train_dataset = My_dataset(load_dataset(config, dataTable))
-            valid_dataset = My_dataset(load_dataset(config, validTable))
+            xt, yt = load_dataset(config, dataTable)
+            xv, yv = load_dataset(config,validTable)
+            shuffled_indicest = np.random.permutation(xt.shape[0])
+            xt = xt[shuffled_indicest]
+            yt = yt[shuffled_indicest]
+            train_dataset = My_dataset((xt,yt))
+            valid_dataset = My_dataset((xv,yv))
 
         dropLastT = False
         if (dataTable.shape[0]%batch_size==1):
@@ -249,13 +263,13 @@ def train_NN(mainPath, simulation_path="simu.parquet"):
             nn_model.load_state_dict(torch.load(mainPath+"function_prediction/tempModel.pt"))
             nn_model.train()
 
-        #loss = nn.MSELoss()
-        loss = CustomMSELoss()
+        loss = nn.MSELoss()
+        #loss = CustomMSELoss()
 
         #optimizer = optim.SGD(nn_model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.05)
         optimizer = optim.Adam(nn_model.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=weight_decay)
 
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.75)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.8)
         #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
 
         print("prepared to train nn")
@@ -307,8 +321,8 @@ def varyHyperparameters():
 
 print("start_train_python")
 
-dataManager.manageDataset("train_nn")
-
-
-train_NN(mainPath)
-
+train_NN(0,False,mainPath)
+predict_cicle(0)
+for i in range(150):
+    train_NN(i+1,True,mainPath)
+    predict_cicle(i+1)

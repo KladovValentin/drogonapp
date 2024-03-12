@@ -3,6 +3,8 @@
 #include "../include/functions.h"
 #include "../include/constants.h"
 
+#include <iomanip>
+
 using namespace std;
 
 using namespace dateRunF;
@@ -271,7 +273,7 @@ void EpicsDBManager::appendDBTable(string mode, int runl, vector<double> dbPars)
         cout << "s" << endl;
         fout << runl << "  ";
         for (size_t j = 0; j < dbPars.size(); j++){
-            fout << dbPars[j] << "  ";
+            fout << std::fixed << std::setprecision(5) << dbPars[j] << "  ";
         } 
         fout << endl;
     }
@@ -285,7 +287,7 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
 
     std::ofstream fout;
     //const char* saveFile = (saveLocation+"info_tables/MDCALLSec2.dat").c_str();
-    string saveFileStr = ((string)(saveLocation+"info_tables/MDCModSec1.dat"));
+    string saveFileStr = ((string)(saveLocation+"info_tables/MDCModSecPrecise.dat"));
     const char* saveFile = saveFileStr.c_str();
     cout << "saving epics data to '" << saveFile << "' with mode " << mode << endl;
     if (mode == "new") {
@@ -294,7 +296,7 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
         string historyFileStr;
         while (fileExists){
             countHist+=1;
-            historyFileStr = ((string)(saveLocation+"info_tables/MDCModSec1Hist" + std::to_string(countHist) + ".dat"));
+            historyFileStr = ((string)(saveLocation+"info_tables/MDCModSecPreciseHist" + std::to_string(countHist) + ".dat"));
             const char* historyFileT = historyFileStr.c_str();
             fileExists = fs::exists(historyFileT);
         }
@@ -314,7 +316,7 @@ void EpicsDBManager::makeTableWithEpicsData(string mode, int runl, int runr){
         if (dbPars.size() > 0){
             fout << runBorders[i] << "  ";
             for (size_t j = 0; j < dbPars.size(); j++){
-                fout << dbPars[j] << "  ";
+                fout << std::fixed << std::setprecision(5) << dbPars[j] << "  ";
             } 
             fout << endl;
         }

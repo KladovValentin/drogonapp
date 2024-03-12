@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
             newRuns.push_back(sourceRunListzxc[index]);
         else
             break;
-        if (sourceRunListzxc[index]>448533980){//} || sourceRunListzxc[index] < 443760537){
+        if (sourceRunListzxc[index]>448533980 || sourceRunListzxc[index] < 443756673){
             index+=1;  
             continue;
         }
@@ -138,7 +138,7 @@ int main(int argc, char* argv[]) {
             fout1 << newRuns[i] << endl;
         }
         fout1.close();
-        std::this_thread::sleep_for(std::chrono::seconds(6));
+        std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 
 }

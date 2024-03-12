@@ -11,6 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from tqdm.auto import tqdm
 from pathlib import Path
+from config import Config
 
 
 class My_dataset(Dataset):
@@ -81,26 +82,26 @@ def load_dataset(config, dataTable):
                 for j in range(sentenceLength-i-1):
                     xii = []
                     for s in range(channelsLength):
-                        xii.append(dfn[0,24*(s)+0])
+                        xii.append(dfn[0,cellsLength*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[0,:-1])
-                    yi.append(dfn[0,-24])
+                    yi.append(dfn[0,-cellsLength])
                 for j in range(i+1):
                     xii = []
                     for s in range(channelsLength):
-                        xii.append(dfn[j,24*(s)+0])
+                        xii.append(dfn[j,cellsLength*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[j,:-1])
-                    yi.append(dfn[j,-24])
+                    yi.append(dfn[j,-cellsLength])
                     
             else:
                 for j in range(sentenceLength):
                     xii = []
                     for s in range(channelsLength):
-                        xii.append(dfn[i-sentenceLength+1+j,24*(s)+0])
+                        xii.append(dfn[i-sentenceLength+1+j,cellsLength*(s)+0])
                     xi.append(xii)
                     #xi.append(dfn[i-sentenceLength+1+j,:-1])
-                    yi.append(dfn[i-sentenceLength+1+j,-24])
+                    yi.append(dfn[i-sentenceLength+1+j,-cellsLength])
             x.append(xi)
             y.append(yi)
         x = np.array(x).astype(np.float32)
@@ -190,7 +191,7 @@ def load_dataset(config, dataTable):
 
     # for each entry (x[i]) -> x[i][-1] = (7,24) -> if (x[i][-j-2] - x[i][-1] > 4)
     
-    """
+    
     listt = list()
     for i in range(x.shape[0]):
         for j in range(x.shape[1]-1):
@@ -201,7 +202,7 @@ def load_dataset(config, dataTable):
                         continue
                     x[i][-j-2][k][l] = x[i][-j-2+1][k][l]
 
-    """
+    
     """
     data = np.array(listt)
     hist, bins = np.histogram(data, bins=100)
@@ -263,6 +264,8 @@ class DataManager():
 
     def normalizeDataset(self, df):
         #print(df)
+        cellsLength = Config().cellsLength
+
         pathFP = self.mainPath + 'function_prediction/'
         meanValues, stdValues = readTrainData(pathFP,"")
         columns = list(df.columns)
@@ -271,9 +274,9 @@ class DataManager():
             masks.append(df[self.poorColumnValues[i][0]]==self.poorColumnValues[i][1])
 
         for i in range(len(columns)-1):
-            if (i >= len(columns)-1-24): #errors
+            if (i >= len(columns)-1-cellsLength): #errors
                 df[columns[i+1]] = df[columns[i+1]].replace(0, meanValues[i]*10)
-                df[columns[i+1]] = (df[columns[i+1]])/stdValues[i-24]
+                df[columns[i+1]] = (df[columns[i+1]])/stdValues[i-cellsLength]
                 continue
             if (stdValues[i]!=0):
                 df[columns[i+1]] = (df[columns[i+1]]-meanValues[i])/stdValues[i]
@@ -293,7 +296,7 @@ class DataManager():
         df = df0.copy()
         df = self.normalizeDataset(df)
         #print(df)
-        cut = 5
+        cut = 7
 
         columns = list(df.columns)
         criteria = ((df.iloc[:,1:]<-5) | (df.iloc[:,1:]>5))
@@ -313,7 +316,7 @@ class DataManager():
     
         return setTable
 
-    def manageDataset(self, mod):
+    def manageDataset(self, mod,ind):
         pathFP = self.mainPath + 'function_prediction/'
 
         #self.prepareTable
@@ -323,9 +326,24 @@ class DataManager():
         dftCorr = self.getDataset(self.mainPath + "nn_input/outNNTestSMzxc.dat", "simLabel")
         #print(dftCorr)
 
-        dftTV = dftCorr.iloc[:int(dftCorr.shape[0]*0.1)].copy()
-        dftTrainV = dftTV.iloc[:int(dftTV.shape[0]*0.5)].copy()
-        dftTest = dftTV.drop(dftTrainV.index)
+        baseTrainRange = int(dftCorr.shape[0]*0.2)
+        retrainIndex = ind
+        retrain0 = max(baseTrainRange + 60*(retrainIndex-3), baseTrainRange)
+        retrain1 = baseTrainRange + 60*retrainIndex
+        retrain2 = baseTrainRange + 60*(retrainIndex+1)
+        if (retrainIndex == 0):
+            dftTV = dftCorr.iloc[:baseTrainRange].copy()
+        else:
+            dftTV = dftCorr.iloc[retrain0:retrain1].copy()
+        dftTrainV = dftTV.copy()
+        #dftTrainV = dftTV.iloc[:int(dftTV.shape[0]*1.0)].copy()
+        #startRetrain = dftCorr.shape[0]-1000
+        #if startRetrain < 0:
+        #    startRetrain = 0
+        #dftTV = dftCorr.iloc[startRetrain:int(dftCorr.shape[0])].copy()
+        #dftTrainV = dftTV.iloc[:int(dftTV.shape[0])].copy()
+        #dftTest = dftTV.drop(dftTrainV.index)
+        dftTest = dftCorr.iloc[retrain1:retrain2].copy()
         dftCorr = dftTrainV.copy()
 
         #print(dftCorr)

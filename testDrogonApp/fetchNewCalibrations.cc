@@ -10,6 +10,7 @@
 #include <regex>
 #include <chrono>
 #include <thread>
+#include <iomanip>
 
 #include <jsoncpp/json/json.h>
 
@@ -142,9 +143,10 @@ std::string executeCommand(const char* command) {
 
 void appendTargetFileWithNewEntries(std::pair<int, int> newEntriesIndices){
     //std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModNew.dat";
-    //std::string oldTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModzxc.dat";
-    std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModAdd.dat";
     std::string oldTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModzxc.dat";
+    //std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModAdd.dat";
+    std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModPrecise.dat";
+    //std::string oldTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModPrecise.dat";
 
     // Read old file
     std::ifstream file(oldTable);
@@ -168,7 +170,7 @@ void appendTargetFileWithNewEntries(std::pair<int, int> newEntriesIndices){
     }
     file.close();
 
-    cout << existingEntries.size() << endl;
+    std::cout << existingEntries.size() << endl;
 
 
     // Read new file
@@ -190,12 +192,12 @@ void appendTargetFileWithNewEntries(std::pair<int, int> newEntriesIndices){
     std::ofstream outfile(oldTable, std::ios::app);
     int index = 0;
     for (std::vector<double> newEntry: newEntries){
-        if (existingEntries.find((int)newEntry[0]) != existingEntries.end()) {
-            continue;
-        }
-        //else if (newEntry.size() == 5 && index >= newEntriesIndices.first && index < newEntriesIndices.second) {
-        else if (newEntry.size() == 5) {
-            outfile << (int)newEntry[0] << "    " << (int)newEntry[1] << "  " << (int)newEntry[2] << "  " << newEntry[3] << "   " << newEntry[4] << std::endl;
+        //if (existingEntries.find((int)newEntry[0]) != existingEntries.end()) {
+        //    continue;
+        //}
+        if (newEntry.size() == 5 && index >= newEntriesIndices.first && index < newEntriesIndices.second) {
+        //else if (newEntry.size() == 5) {
+            outfile << std::fixed << std::setprecision(7) << (int)newEntry[0] << "   " << (int)newEntry[1] << " " << (int)newEntry[2] << " " << newEntry[3] << "    " << newEntry[4] << std::endl;
         }
         index += 1;
     }
@@ -212,6 +214,7 @@ int main(int argc, char* argv[]) {
     int nextDay = 0;
     int tempCount = 41;
 
+    int index1 = 0; int index2 = 10*24;
     while(1){
 
         vector<int> runlist = loadrunlist();
@@ -237,7 +240,7 @@ int main(int argc, char* argv[]) {
         //vector<string> newFileNames = getNewFNames(startRun, baseRawDir.c_str());
         //std::sort(newFileNames.begin(), newFileNames.end());
 
-        cout << "x" << endl;
+        std::cout << "x" << endl;
 
         // If the set day is old and newfiles are depleted -> switch to new day (only here because want some freedom with this setting in the file)
         auto currentTime = std::chrono::system_clock::now();
@@ -262,13 +265,13 @@ int main(int argc, char* argv[]) {
         std::string checkSqueue = (string)("ssh -J vkladov@lxpool.gsi.de vkladov@vae23.hpc.gsi.de") +
                                     (string)(" 'squeue -u vkladov'");
 
-        int index1 = 0; int index2 = 10*24;
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::this_thread::sleep_for(std::chrono::seconds(30));
         tempCount+=1;
-        day = tempCount < 100 ? "0"+to_string(tempCount) : to_string(tempCount);
-        day = tempCount < 10 ? "0"+day : day;
+        //day = tempCount < 100 ? "0"+to_string(tempCount) : to_string(tempCount);
+        //day = tempCount < 10 ? "0"+day : day;
         while (1){
-            cout << day << "    " << tempCount << endl;
+            break;
+            std::cout << day << "    " << tempCount << endl;
             std::this_thread::sleep_for(std::chrono::seconds(0));
             /*string squeueOut = executeCommand(checkSqueue.c_str());
             if (squeueOut.find("vkladov") != std::string::npos){
@@ -276,14 +279,14 @@ int main(int argc, char* argv[]) {
                 std::this_thread::sleep_for(std::chrono::minutes(15));
             }
             else{*/
-                cout << "jobs finished" << endl;
+                std::cout << "jobs finished" << endl;
                 std::string hadd = (string)("ssh -J vkladov@lxpool.gsi.de vkladov@vae23.hpc.gsi.de") +
                                     (string)(" 'cd testBatchFarm;") +
                                     (string)(" hadd -f /u/vkladov/testBatchFarm/rawHists45.root /lustre/hades/user/vkladov/rawCalStuff/day" + day + "/*.root;") +
                                     (string)(" root -l -q analyseHists.cc'");
                 std::system(hadd.c_str());
                 std::system("cp /home/localadmin_jmesschendorp/u/testBatchFarm/mDCCals45.dat /home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModAdd.dat");
-                cout << "copied" << endl;
+                std::cout << "copied" << endl;
                 break;
             //}
 
@@ -291,7 +294,7 @@ int main(int argc, char* argv[]) {
         }
         /// append existing table with new data, check if it is new?
         appendTargetFileWithNewEntries(std::make_pair(index1,index2));
-        cout << "appended file" << endl;
+        std::cout << "appended file" << endl;
         index1+=10*24;
         index2+=10*24;
         //break;
