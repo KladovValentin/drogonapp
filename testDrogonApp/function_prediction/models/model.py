@@ -307,7 +307,7 @@ class GConvLSTMCell(nn.Module):
         #       hy: of shape (batch_size, nodes, hidden_size)
         #       cy: of shape (batch_size, nodes, hidden_size)
 
-        if hx is None:
+        if hx == None:
             hx = Variable(input.new_zeros(input.size(0), self.n_nodes, self.hidden_channels))
             hx = (hx, hx)
         hx, cx = hx
@@ -331,10 +331,14 @@ class GCNLSTM(torch.nn.Module):
         #self.e_i = e_i
 
         self.e_i = torch.LongTensor(np.array(
-            [[ 0,  0,  0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  6,  6,  7,  7,  8,  8,  9,  9, 10, 10, 11, 12, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 18, 18, 19, 20, 21, 22],
-             [ 1,  5,  6,  2,  7,  3,  8,  4,  9,  5, 10, 11,  7, 11,  8, 13,  9, 14, 10, 15, 11, 16, 17, 13, 17, 18, 14, 19, 15, 20, 16, 21, 17, 22, 23, 19, 23, 20, 21, 22, 23]]))
+            [[ 0,  0,  0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  6,  6,  6, 7,  7,  8,  8,  9,  9, 10, 10, 11, 12, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 18, 18, 19, 20, 21, 22],
+             [ 1,  5,  6,  2,  7,  3,  8,  4,  9,  5, 10, 11,  7, 11, 12, 8, 13,  9, 14, 10, 15, 11, 16, 17, 13, 17, 18, 14, 19, 15, 20, 16, 21, 17, 22, 23, 19, 23, 20, 21, 22, 23]]))
+        #self.e_i = torch.LongTensor(np.array(
+        #    [[ 0,  0,  0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  6,  6,  7,  8,  9, 10 ],
+        #     [ 1,  5,  6,  2,  7,  3,  8,  4,  9,  5, 10, 11,  7, 11,  8,  9, 10, 11 ]]))
         self.e_a = torch.Tensor(np.array(
-              [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]))
+              [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]))
+        #     [ 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]))
 
         self.input_size = input_size[0]
         self.nodes = input_size[1]
@@ -343,9 +347,9 @@ class GCNLSTM(torch.nn.Module):
         self.num_layers = num_layers
         self.kernel_size = kernel_size
         
-        self.rnn = nn.LSTM(self.embedding_size, self.hidden_size, num_layers, batch_first=True, bidirectional=False)
+        #self.rnn = nn.LSTM(self.embedding_size, self.hidden_size, num_layers, batch_first=True, bidirectional=False)
         self.padding = (3 // 2, 3 // 2)
-        self.conv1 = nn.Conv2d(in_channels=self.embedding_size, out_channels=self.hidden_size, kernel_size=(3, 3), padding=self.padding, bias=True)
+        #self.conv1 = nn.Conv2d(in_channels=self.embedding_size, out_channels=self.hidden_size, kernel_size=(3, 3), padding=self.padding, bias=True)
 
         self.gcn_cell_list = nn.ModuleList([GConvLSTMCell((self.embedding_size,self.nodes),
                                             self.hidden_size,
@@ -357,10 +361,11 @@ class GCNLSTM(torch.nn.Module):
         self.intermediate_size = 8
 
         self.nn_model = nn.ModuleList([nn.Sequential(
-            nn.Linear(self.intermediate_size, 256, bias=True),
-            #nn.BatchNorm1d(256),
+            nn.Linear(self.intermediate_size, 128, bias=True),
+            nn.BatchNorm1d(128),
+            #nn.Dropout(0.5),
             nn.LeakyReLU(inplace=True),
-            nn.Linear(256, self.embedding_size),
+            nn.Linear(128, self.embedding_size),
             #nn.BatchNorm1d(self.intermediate_size)
         ) for _ in range(self.nodes)])
 
@@ -368,9 +373,10 @@ class GCNLSTM(torch.nn.Module):
             #nn.Linear(self.intermediate_size, 256, bias=True),
             nn.Linear(self.input_size, 256, bias=True),
             nn.BatchNorm1d(256),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(256, 256, bias=True),
-            nn.BatchNorm1d(256),
+            #nn.Dropout(0.5),
+            #nn.LeakyReLU(inplace=True),
+            #nn.Linear(256, 256, bias=True),
+            #nn.BatchNorm1d(256),
             nn.LeakyReLU(inplace=True),
             nn.Linear(256, self.intermediate_size),
             nn.BatchNorm1d(self.intermediate_size)
@@ -411,7 +417,7 @@ class GCNLSTM(torch.nn.Module):
         embedded = torch.cat(output_list, dim=2)
         #shape: batch, sentence, nodes, embedding
 
-        if hx is None:
+        if hx == None:
             if torch.cuda.is_available():
                 h0 = Variable(torch.zeros(self.num_layers, batch_size, self.nodes, self.hidden_size).cuda())
             else:
@@ -451,7 +457,7 @@ class GCNLSTM(torch.nn.Module):
 
 
         # LSTM + GCN going "column-by-column" through the sentence
-        
+
         for t in range(sentence_length):
 
             for layer in range(self.num_layers):
@@ -485,6 +491,9 @@ class GCNLSTM(torch.nn.Module):
             #    result_tensor = torch.cat((result_tensor, newTensorI), dim=1)
             #print(hidden_l[0].shape,newTensor.shape, result_tensor.shape)
         result_tensor = torch.cat(output_list1, dim=1)
+        
+
+        #result_tensor = self.linear(embedded.reshape(batch_size*sentence_length* self.nodes, self.embedding_size)).reshape((batch_size, sentence_length, self.nodes)) 
         
         #newTensor11 = self.linear(embedded.reshape((batch_size*sentence_length,self.nodes, self.hidden_size))).reshape((batch_size, sentence_length, self.nodes))
 
@@ -545,7 +554,7 @@ class Conv2dLSTMCell(nn.Module):
         #       cy: of shape (batch_size, hidden_size, height_size, width_size)
 
 
-        if hx is None:
+        if hx == None:
             hx = Variable(input.new_zeros(input.size(0), self.hidden_size, self.input_size[1], self.input_size[2]))
             hx = (hx, hx)
         hx, cx = hx
@@ -684,7 +693,7 @@ class Conv2dLSTM(nn.Module):
         #
         # Output of shape (batch_size, sentence_length, output_size)
 
-        if hx is None:
+        if hx == None:
             if torch.cuda.is_available():
                 h0 = Variable(torch.zeros(self.num_layers, input.size(0), self.hidden_size, self.height, self.width).cuda())
             else:

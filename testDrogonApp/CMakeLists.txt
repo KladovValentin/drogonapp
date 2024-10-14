@@ -32,9 +32,12 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ROOT_CXX_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ROOT_LD_FLAGS}")
+
+set(OCI_INCLUDE_DIR "/home/localadmin_jmesschendorp/lib/instantclient_23_5/sdk/include")
+set(OCI_LIB_DIR "/home/localadmin_jmesschendorp/lib/instantclient_23_5")
+
+include_directories(${OCI_INCLUDE_DIR})
 #set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ROOT_LD_FLAGS}")
-
-
 
 
 # ##############################################################################
@@ -45,6 +48,29 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ROOT_LD_FLAGS}")
 #
 # and comment out the following lines
 
+# Print debug information
+message(STATUS "OCI_INCLUDE_DIR: ${OCI_INCLUDE_DIR}")
+message(STATUS "OCI_LIB_DIR: ${OCI_LIB_DIR}")
+
+find_library(OCI_LIB NAMES clntsh HINTS ${OCI_LIB_DIR})
+find_library(OCI_CORE_LIB NAMES clntshcore HINTS ${OCI_LIB_DIR})
+find_library(OCI_COMMON_LIB NAMES nnz12 HINTS ${OCI_LIB_DIR})
+
+# Print the paths to the libraries found
+message(STATUS "OCI_LIB: ${OCI_LIB}")
+message(STATUS "OCI_CORE_LIB: ${OCI_CORE_LIB}")
+message(STATUS "OCI_COMMON_LIB: ${OCI_COMMON_LIB}")
+
+# Check if libraries were found
+if(NOT OCI_LIB)
+    message(FATAL_ERROR "clntsh library not found")
+endif()
+if(NOT OCI_CORE_LIB)
+    message(FATAL_ERROR "clntshcore library not found")
+endif()
+if(NOT OCI_COMMON_LIB)
+    message(FATAL_ERROR "nnz12 library not found")
+endif()
 
 # Find Python interpreter
 find_package(Python REQUIRED COMPONENTS Development)
@@ -55,6 +81,7 @@ target_link_libraries(${PROJECT_NAME}
         ${ROOT_LIBRARIES}
         ${Python_LIBRARIES}
         /home/localadmin_jmesschendorp/onnxruntime-linux-x64-1.14.1/lib/libonnxruntime.so.1.14.1
+        ${OCI_LIB} ${OCI_CORE_LIB} ${OCI_COMMON_LIB}
         -lpqxx
 )
 

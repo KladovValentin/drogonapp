@@ -143,9 +143,10 @@ std::string executeCommand(const char* command) {
 
 void appendTargetFileWithNewEntries(std::pair<int, int> newEntriesIndices){
     //std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModNew.dat";
-    std::string oldTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModzxc.dat";
-    //std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModAdd.dat";
-    std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModPrecise.dat";
+    //std::string oldTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModzxc.dat";
+    std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModAdd.dat";
+    std::string oldTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat";
+    //std::string newTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModPrecise.dat";
     //std::string oldTable = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/info_tables/run-mean_dEdxMDCSecModPrecise.dat";
 
     // Read old file
@@ -195,10 +196,10 @@ void appendTargetFileWithNewEntries(std::pair<int, int> newEntriesIndices){
         //if (existingEntries.find((int)newEntry[0]) != existingEntries.end()) {
         //    continue;
         //}
-        if (newEntry.size() == 5 && index >= newEntriesIndices.first && index < newEntriesIndices.second) {
+        //if (newEntry.size() == 5 && index >= newEntriesIndices.first && index < newEntriesIndices.second) {
         //else if (newEntry.size() == 5) {
-            outfile << std::fixed << std::setprecision(7) << (int)newEntry[0] << "   " << (int)newEntry[1] << " " << (int)newEntry[2] << " " << newEntry[3] << "    " << newEntry[4] << std::endl;
-        }
+            outfile << std::fixed << std::setprecision(7) << (int)newEntry[0] << " " << (int)newEntry[1] << " " << (int)newEntry[2] << " " << newEntry[3] << " " << newEntry[4] << std::endl;
+        //}
         index += 1;
     }
     outfile.close();
@@ -219,12 +220,12 @@ int main(int argc, char* argv[]) {
 
         vector<int> runlist = loadrunlist();
 
-        Json::Value jsonObj;
-        std::ifstream inFile((saveLocation + "fetchSettings.json").c_str());
-        inFile >> jsonObj;
-        inFile.close();
-        string day = jsonObj["day"].asString();
-        //string day = "045";
+        //Json::Value jsonObj;
+        //std::ifstream inFile((saveLocation + "fetchSettings.json").c_str());
+        //inFile >> jsonObj;
+        //inFile.close();
+        //string day = jsonObj["day"].asString();
+        string day = "045";
 
         int num = std::stoi(day) + nextDay;
         day = num < 100 ? "0"+to_string(num) : to_string(num);
@@ -265,12 +266,12 @@ int main(int argc, char* argv[]) {
         std::string checkSqueue = (string)("ssh -J vkladov@lxpool.gsi.de vkladov@vae23.hpc.gsi.de") +
                                     (string)(" 'squeue -u vkladov'");
 
-        std::this_thread::sleep_for(std::chrono::seconds(30));
+        std::this_thread::sleep_for(std::chrono::seconds(3));
         tempCount+=1;
-        //day = tempCount < 100 ? "0"+to_string(tempCount) : to_string(tempCount);
-        //day = tempCount < 10 ? "0"+day : day;
+        day = tempCount < 100 ? "0"+to_string(tempCount) : to_string(tempCount);
+        day = tempCount < 10 ? "0"+day : day;
         while (1){
-            break;
+            //break;
             std::cout << day << "    " << tempCount << endl;
             std::this_thread::sleep_for(std::chrono::seconds(0));
             /*string squeueOut = executeCommand(checkSqueue.c_str());
@@ -280,7 +281,7 @@ int main(int argc, char* argv[]) {
             }
             else{*/
                 std::cout << "jobs finished" << endl;
-                std::string hadd = (string)("ssh -J vkladov@lxpool.gsi.de vkladov@vae23.hpc.gsi.de") +
+                std::string hadd = (string)("ssh -J vkladov@lxpool.gsi.de vkladov@vae24.hpc.gsi.de") +
                                     (string)(" 'cd testBatchFarm;") +
                                     (string)(" hadd -f /u/vkladov/testBatchFarm/rawHists45.root /lustre/hades/user/vkladov/rawCalStuff/day" + day + "/*.root;") +
                                     (string)(" root -l -q analyseHists.cc'");

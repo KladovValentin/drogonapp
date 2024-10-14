@@ -56,7 +56,7 @@ def make_graph(config):
             e_ind2.append([i,leftLink])
         
         
-        if (topLink < cellsLength and int(topLink)/6 != 2):
+        if (topLink < cellsLength and int(topLink)/6 != 3):
             e_ind2.append([i,topLink])
     e_ind2 = np.array(e_ind2)
     e_att2 = np.ones((len(e_ind2),))
@@ -198,9 +198,9 @@ def load_dataset(config, dataTable):
             for k in range(x.shape[2]):
                 for l in range(x.shape[3]):
                     listt.append(np.abs(x[i][j][k][l] - x[i][-j-2][k][l]))
-                    if (np.abs(x[i][j][k][l] - x[i][-j-2][k][l]) < 0.5):
-                        continue
-                    x[i][-j-2][k][l] = x[i][-j-2+1][k][l]
+                    #if (np.abs(x[i][j][k][l] - x[i][-j-2][k][l]) < 0.5):
+                    #    continue
+                    #x[i][-j-2][k][l] = x[i][-j-2+1][k][l]
 
     
     """
@@ -275,7 +275,7 @@ class DataManager():
 
         for i in range(len(columns)-1):
             if (i >= len(columns)-1-cellsLength): #errors
-                df[columns[i+1]] = df[columns[i+1]].replace(0, meanValues[i]*10)
+                df[columns[i+1]] = df[columns[i+1]].replace(0, meanValues[i])
                 df[columns[i+1]] = (df[columns[i+1]])/stdValues[i-cellsLength]
                 continue
             if (stdValues[i]!=0):
@@ -292,6 +292,7 @@ class DataManager():
     
     def cutDataset(self, df0):
         #print("CUTTING")
+        cellsLength = Config().cellsLength
         columns = list(df0.columns)
         df = df0.copy()
         df = self.normalizeDataset(df)
@@ -299,21 +300,36 @@ class DataManager():
         cut = 7
 
         columns = list(df.columns)
-        criteria = ((df.iloc[:,1:]<-5) | (df.iloc[:,1:]>5))
         selection = (df[columns[1]]>-cut) & (df[columns[1]]<cut)
-        for i in range(len(columns)-4):
+        for i in range(len(columns)-2*cellsLength):
             selection = selection & (df[columns[i+2]]>-cut) & (df[columns[i+2]]<cut)
         #df0.iloc[:,1:][criteria] = 0
-        df0 = df0.loc[selection].copy()
+        df0 = df0.loc[selection].copy().reset_index(drop=True)
         #print(df0)
         return df0
 
 
-    def getDataset(self, rootPath,mod):
+    def getDataset(self, rootPath, mod):
         # read data, select raws (pids) and columns (drop)
 
         setTable = pandas.read_table(rootPath,sep=' ',header=None)
-    
+        print(setTable)
+        print("dropping...")
+        columns = setTable.columns
+        #for i in range(7+2):
+            #for j in range(12):
+            #    print(columns[24*i+j+12+1])
+            #    setTable = setTable.drop(columns[24*i+j+12+1], axis=1)
+        print(setTable)
+        #for i in range(12):
+        #    setTable = setTable.drop(columns[24*1+i+1], axis=1)
+        #    setTable = setTable.drop(columns[24*2+i+1], axis=1)
+        #    setTable = setTable.drop(columns[24*4+i+1], axis=1)
+        #    setTable = setTable.drop(columns[24*5+i+1], axis=1)
+        #    setTable = setTable.drop(columns[24*6+i+1], axis=1)
+        print(setTable)
+        
+
         return setTable
 
     def manageDataset(self, mod,ind):
@@ -323,14 +339,18 @@ class DataManager():
         dir = str(Path(__file__).parents[1])
         #print(dir)
         # outNNTestSM / outNNTest1
-        dftCorr = self.getDataset(self.mainPath + "nn_input/outNNTestSMzxc.dat", "simLabel")
+        #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNTestSMzxc.dat", "simLabel")
+        dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTarget.dat", "simLabel")
         #print(dftCorr)
+        
+        #dftCorr = self.cutDataset(dftCorr).copy()
 
-        baseTrainRange = int(dftCorr.shape[0]*0.2)
+        baseTrainRange = int(dftCorr.shape[0]*0.22)
         retrainIndex = ind
-        retrain0 = max(baseTrainRange + 60*(retrainIndex-3), baseTrainRange)
-        retrain1 = baseTrainRange + 60*retrainIndex
-        retrain2 = baseTrainRange + 60*(retrainIndex+1)
+        #retrain0 = baseTrainRange + 500*(retrainIndex-1)
+        retrain0 = max(max(baseTrainRange + 500*(int(retrainIndex/2)-4), baseTrainRange + 500*(int(retrainIndex)-10)), int(baseTrainRange/2))
+        retrain1 = baseTrainRange + 500*retrainIndex
+        retrain2 = baseTrainRange + 500*(retrainIndex+1)
         if (retrainIndex == 0):
             dftTV = dftCorr.iloc[:baseTrainRange].copy()
         else:
@@ -343,7 +363,7 @@ class DataManager():
         #dftTV = dftCorr.iloc[startRetrain:int(dftCorr.shape[0])].copy()
         #dftTrainV = dftTV.iloc[:int(dftTV.shape[0])].copy()
         #dftTest = dftTV.drop(dftTrainV.index)
-        dftTest = dftCorr.iloc[retrain1:retrain2].copy()
+        dftTest = dftCorr.iloc[retrain1:retrain2-1].copy()
         dftCorr = dftTrainV.copy()
 
         #print(dftCorr)

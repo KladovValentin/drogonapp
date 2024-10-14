@@ -11,7 +11,7 @@
 #include <TROOT.h>
 #include <TLegend.h>
 
-//#include "include/functions.h"
+#include "include/functions.h"
 
 #include <iostream>
 #include <fstream>
@@ -209,6 +209,91 @@ void remakeMDCALL(){
 }
 
 
+void drawTargetSectorComparison(){
+    cout << "drawing target sector divided..." << endl;
+    const std::string saveLocation1 = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
+    vector< pair< int, vector<double> > > tableClbAll = preTrainFunctions::readClbTableFromFile(saveLocation1+"info_tables/run-mean_dEdxMDCSecModPreciseFit1.dat");     
+    cout << " a  " << endl;
+    const size_t split = 4;
+    vector< vector<double> > arr[split];
+    for (size_t s = 0; s < split; s++){
+        arr[s].resize(4,vector<double>(0));
+        for (size_t i = 0; i < tableClbAll.size(); i++){
+            if (tableClbAll[i].second[0] != s || tableClbAll[i].second[1] != 2)
+                continue;
+            arr[s][0].push_back((tableClbAll[i].first));
+            arr[s][1].push_back(tableClbAll[i].second[2]);
+            arr[s][2].push_back(0);
+            arr[s][3].push_back(tableClbAll[i].second[3]);
+        }
+    }
+
+    TGraphErrors* grClbAll[split];
+    double mean0[split];
+    for (size_t i = 0; i < split; i++){
+        arr[i][0] = dateRunF::timeVectToDateNumbers(arr[i][0]);
+        arr[i][1] = runningMeanVector(arr[i][1],20);
+        //if (i == 0){
+            mean0[i] = 0;
+            for (size_t j = 0; j < arr[i][0].size(); j++){
+                mean0[i]+=arr[i][1][j];
+            }
+            mean0[i] = mean0[i]/arr[i][0].size();
+        //}
+
+        if (i>10){
+            for (size_t j = 0; j < arr[i][0].size(); j++){
+                arr[i][1][j] = arr[i][1][j]/arr[0][1][j];
+            }
+        }
+    }
+    for (size_t i = 0; i < split; i++){
+        //arr[i][1] = normalizeVectorNN(arr[i][1]);
+        for (size_t j = 0; j < arr[i][0].size(); j++){
+            arr[i][1][j] = arr[i][1][j]/mean0[i];
+        }
+    }
+
+    for (size_t i = 0; i < split; i++){
+        grClbAll[i]  = new TGraphErrors( arr[i][0].size(), &arr[i][0][0], &arr[i][1][0], &arr[i][2][0], &arr[i][2][0]);
+        grClbAll[i]->SetMarkerStyle(22);
+        grClbAll[i]->SetMarkerSize(0.5);
+        grClbAll[i]->SetMarkerColor(1);
+        grClbAll[i]->GetYaxis()->SetRangeUser(0.85,1.15);
+        //if (i == 0)
+        //    grClbAll[i]->GetYaxis()->SetRangeUser(-2,2);
+        grClbAll[i]->GetXaxis()->SetTimeDisplay(1);
+        grClbAll[i]->GetXaxis()->SetTimeFormat("%d/%m");
+        grClbAll[i]->SetTitle(Form("plane%zu;time;fluctuations %zu",i+1,i+1));
+        grClbAll[i]->GetXaxis()->SetLabelSize(0.05);
+        grClbAll[i]->GetYaxis()->SetLabelSize(0.05);
+        grClbAll[i]->GetXaxis()->SetTitleSize(0.08);
+        grClbAll[i]->GetYaxis()->SetTitleSize(0.08);
+        grClbAll[i]->GetXaxis()->SetTitleOffset(0.65);
+        grClbAll[i]->GetYaxis()->SetTitleOffset(0.5);
+        if (i == 0)
+            grClbAll[i]->SetTitle(Form("plane%zu;time;relative change",i+1));
+    }
+
+    gStyle->SetTitleFontSize(0.1); // Adjust the value as needed
+    gStyle->SetLabelSize(0.45, "xy"); // Adjust the value as needed
+
+    TCanvas* canvas = new TCanvas("canvas", "Canvas Title", 1920, 950);
+    canvas->Divide(2, 2); // Divide canvas into 3 rows and 1 column
+    for (size_t i = 0; i < split; i++){
+        canvas->cd(i+1);
+        TPad* pad = new TPad(Form("pad%zu", i + 1), Form("Pad %zu", i + 1), 0.0, 0.0, 1.0, 1.0);
+        pad->SetBottomMargin(0.15);
+        pad->Draw();
+        pad->cd();
+        pad->SetGridy();
+        grClbAll[i]->Draw("AP");
+        canvas->Update();
+        cin.get();
+    }
+    //delete canvas;
+}
+
 
 void drawTimeConsumptions(){
     TFile *f1 = TFile::Open("outHome.root");
@@ -251,18 +336,19 @@ void drawTimeConsumptions(){
 }
 
 void mergePredictions(){
+    int nodes_length = 24;
     const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
-    ofstream ofstr((saveLocation+ "function_prediction/predicted_all.txt").c_str());
-    for (int i = 0; i < 1; i++){
+    ofstream ofstr((saveLocation+ "function_prediction/predicted/predicted_all.txt").c_str());
+    for (int i = 0; i < 18; i++){
         ifstream fin1;
-        fin1.open((saveLocation+ "function_prediction/predicted_" + to_string(i) + ".txt").c_str());
+        fin1.open((saveLocation+ "function_prediction/predicted/predicted_" + to_string(i) + ".txt").c_str());
         while (!fin1.eof()){
             double run;
             double prediction;
             vector<double> predictionNodes;
             fin1 >> run;
             ofstr << (int)run;
-            for (size_t i = 0; i < 24; i ++){
+            for (size_t i = 0; i < nodes_length; i ++){
                 fin1 >> prediction;
                 predictionNodes.push_back(prediction);
                 //cout << prediction << endl;
@@ -274,17 +360,17 @@ void mergePredictions(){
     }
     ofstr.close();
 
-    ofstr.open((saveLocation+ "function_prediction/predicted1_all.txt").c_str());
-    for (int i = 0; i < 100; i++){
+    ofstr.open((saveLocation+ "function_prediction/predicted/predicted1_all.txt").c_str());
+    for (int i = 0; i < 18; i++){
         ifstream fin1;
-        fin1.open((saveLocation+ "function_prediction/predicted1_" + to_string(i) + ".txt").c_str());
+        fin1.open((saveLocation+ "function_prediction/predicted/predicted1_" + to_string(i) + ".txt").c_str());
         while (!fin1.eof()){
             double run;
             double prediction;
             vector<double> predictionNodes;
             fin1 >> run;
             ofstr << (int)run;
-            for (size_t i = 0; i < 24; i ++){
+            for (size_t i = 0; i < nodes_length; i ++){
                 fin1 >> prediction;
                 predictionNodes.push_back(prediction);
                 //cout << prediction << endl;
@@ -298,8 +384,11 @@ void mergePredictions(){
 }
 
 void drawTargetPredictionComparison(){
-    const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
+    int nodes_length = 24;
+    TFile* fileOut = new TFile("savedPlotsTemp1.root","RECREATE");
 
+    const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
+    int chanTo = 3;
     /// Reading mean and std
     ifstream fin1;
     vector<double> meanValues, stdValues;
@@ -316,10 +405,12 @@ void drawTargetPredictionComparison(){
     }
     fin1.close();
 
+    TH2F* targetVsSource = new TH2F("targetVsSource","",100,-5,5,100,-5,5);
+
     /// Reading target values and averaging -> map
     ifstream fin2;
     TH1F* hdTarget1D = new TH1F("hdTarget1D","target1-target2;#errors;counts",1000,-100,100);
-	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPrecise.dat").c_str());
+	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat").c_str());
     std::map<int, vector< pair<double,double> > > targets;
     vector<int> runsTargets;
     vector<double> valuesTargets,runsTargetsErr,valuesTargetsErr;
@@ -332,27 +423,31 @@ void drawTargetPredictionComparison(){
         for (size_t i = 0; i < 24; i++){
             fin2 >> run >> sector >> mod >> target >> targetErr;
             if (predTargetNodes.size()>0){
-                if (fabs(target - predTargetNodes[i].first) < predTargetNodes[i].second*5)
-                    targetErr = fabs(target - predTargetNodes[i].first)/2.;
+                //if (fabs(target - predTargetNodes[i].first) < predTargetNodes[i].second*5)
+                //    targetErr = fabs(target - predTargetNodes[i].first)/2.;
                 //else
                 //    targetErr *= 2;
                 if (targetErr == 0){
                     targetErr = predTargetNodes[i].second;
                 }
-                hdTarget1D->Fill((target - predTargetNodes[i].first)/targetErr );
+                hdTarget1D->Fill((target - predTargetNodes[i].first)/targetErr);
             }
-            meanTarget+=(target-meanValues[meanValues.size()-24*2+i])/stdValues[meanValues.size()-24*2+i];
-            meanTargetErr += pow(targetErr/stdValues[meanValues.size()-24*2+i],2);
-            if (i == 0){
+            meanTarget+=(target-meanValues[meanValues.size()-nodes_length*2+i])/stdValues[meanValues.size()-nodes_length*2+i];
+            meanTargetErr += pow(targetErr/stdValues[meanValues.size()-nodes_length*2+i],2);
+            if (i == chanTo && run < 445503850){
                 runsTargets.push_back(run);
-                //valuesTargets.push_back((target-meanValues[meanValues.size()-24*2])/stdValues[meanValues.size()-24*2]);
+                //valuesTargets.push_back((target-meanValues[meanValues.size()-nodes_length*2+i])/stdValues[meanValues.size()-nodes_length*2+i]);
                 valuesTargets.push_back(target);
                 runsTargetsErr.push_back(0);
-                //valuesTargetsErr.push_back(targetErr/stdValues[meanValues.size()-24*2]);
+                //valuesTargetsErr.push_back(targetErr/stdValues[meanValues.size()-nodes_length*2+i]);
                 valuesTargetsErr.push_back(targetErr);
+                if (target < 20){
+                    cout << run << "    " << target << "    " << targetErr << endl;
+                }
             }
             //cout << run << endl;
-            targetNodes.push_back(make_pair(target,targetErr));
+            if (valuesTargets.size() >= 1)
+                targetNodes.push_back(make_pair(valuesTargets[valuesTargets.size()-1],valuesTargetsErr[valuesTargetsErr.size()-1]));
         }
         //meanTarget = meanTarget/24.;
         //meanTargetErr = sqrt(meanTargetErr)/24.;
@@ -369,34 +464,56 @@ void drawTargetPredictionComparison(){
     /// Reading MDC epics data
     fin2.open((saveLocation + "info_tables/MDCModSecPrecise.dat").c_str());
     std::map<int, vector< double > > mdcChanChamb0;
+    cout << "a" << endl;
     vector<double> runsChans;
     vector<double> valuesChans[7];
+    vector<double> runsChans2;
+    vector<double> valuesChans2;
+    TH1F* hHvValues = new TH1F("hHvValues","",100,-10,10);
     while (!fin2.eof()){
         int run;
         fin2 >> run;
         vector<double> valuesChan1;
+        double fillHist = -100;
         for (size_t i = 0; i < 7; i++){
             double valueBuffChan;
             double valueChan;
             //cout << valueChan << endl;
             for (size_t j = 0; j < 24; j++){
                 fin2 >> valueBuffChan;
-                if (j == 0){
+                if (j == chanTo){
                     if (i == 0)
                         runsChans.push_back((double)(runToDateNumber(run)));
                     if (i == 0)
-                        valuesChans[i].push_back(-(valueBuffChan-meanValues[i*24])/stdValues[i*24]);
+                        valuesChans[i].push_back(-(valueBuffChan-meanValues[i*nodes_length+j])/stdValues[i*nodes_length+j]);
                     else{
-                        valuesChans[i].push_back((valueBuffChan-meanValues[i*24])/stdValues[i*24]); }
+                        valuesChans[i].push_back(-0.5*(valueBuffChan-meanValues[i*nodes_length+j])/stdValues[i*nodes_length+j]); }
                     //valuesChans.push_back(valueBuffChan);
                     valuesChan1.push_back(valueBuffChan);
+                    hHvValues->Fill((valueBuffChan-meanValues[i*nodes_length+j])/stdValues[i*nodes_length+j]);
+                }
+
+                if (targets.find(run) != targets.end() && i == 0 && j == chanTo  && run < 445503850){
+                    //targetVsSource->Fill(valuesChans[i][valuesChans[i].size()-1], targets[run][j].first);
+                    runsChans2.push_back((double)(runToDateNumber(run)));
+                    valuesChans2.push_back((valueBuffChan-meanValues[i*nodes_length+j])/stdValues[i*nodes_length+j] + targets[run][j].first );
+                    fillHist = (valueBuffChan-meanValues[i*nodes_length+j])/stdValues[i*nodes_length+j] + targets[run][j].first ;
+                }
+                else if (targets.find(run) != targets.end() && i == 3 && j == chanTo && fillHist != -100 && run < 445503850){
+                    targetVsSource->Fill(-0.5*(valueBuffChan-meanValues[i*nodes_length+j])/stdValues[i*nodes_length+j], fillHist );
                 }
             }
         }
         mdcChanChamb0[run] = valuesChan1;
     }
+    cout << "b" << endl;
     fin2.close();
     TGraph* grMDCchan[7];
+    TGraph* grMDCchan2;
+    grMDCchan2 = new TGraph(runsChans2.size(),&runsChans2[0],&valuesChans2[0]);
+    grMDCchan2->SetName("grMDCchan2");
+    grMDCchan2->SetMarkerStyle(22);    grMDCchan2->SetMarkerSize(0.7);    grMDCchan2->SetLineColor(4);    grMDCchan2->SetMarkerColor(4);    grMDCchan2->SetLineWidth(1);
+    grMDCchan2->GetXaxis()->SetTimeDisplay(1); grMDCchan2->GetXaxis()->SetTimeFormat("%d/%m");
     for (size_t i = 0; i < 7; i++){
         grMDCchan[i] = new TGraph(runsChans.size(),&runsChans[0],&valuesChans[i][0]);
         grMDCchan[i]->SetMarkerStyle(22);    grMDCchan[i]->SetMarkerSize(1.0);    grMDCchan[i]->SetLineColor(2);    grMDCchan[i]->SetMarkerColor(2);    grMDCchan[i]->SetLineWidth(1);
@@ -420,19 +537,20 @@ void drawTargetPredictionComparison(){
         int n = gr2->GetN();
         //gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),targets[runsTargets[i]].first);
         gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),valuesTargets[i]);
+        //gr2->SetPoint(n,(double)(runsTargets[i]),valuesTargets[i]);
         gr2->SetPointError(n, runsTargetsErr[i], valuesTargetsErr[i]);
     }
     cout << gr2->GetN() << endl;
     cout << "finished with target " << endl;
 
-    fin1.open((saveLocation+ "function_prediction/predicted.txt").c_str());
+    fin1.open((saveLocation+ "function_prediction/predicted/predicted_all.txt").c_str());
     std::map<int, vector< double > > predictions;
     while (!fin1.eof()){
         double run;
         double prediction;
         vector<double> predictionNodes;
         fin1 >> run;
-        for (size_t i = 0; i < 24; i ++){
+        for (size_t i = 0; i < nodes_length; i ++){
             fin1 >> prediction;
             predictionNodes.push_back(prediction);
             //cout << prediction << endl;
@@ -441,14 +559,14 @@ void drawTargetPredictionComparison(){
     }
     fin1.close();
 
-    fin2.open((saveLocation+ "function_prediction/predicted1.txt").c_str());
+    fin2.open((saveLocation+ "function_prediction/predicted/predicted1_all.txt").c_str());
     std::map<int, vector< double > > predictionsTest;
     while (!fin2.eof()){
         double run;
         double prediction;
         vector<double> predictionNodes;
         fin2 >> run;
-        for (size_t i = 0; i < 24; i ++){
+        for (size_t i = 0; i < nodes_length; i ++){
             fin2 >> prediction;
             predictionNodes.push_back(prediction);
         }
@@ -466,7 +584,7 @@ void drawTargetPredictionComparison(){
     for (auto x: predictions){
         if (targets.find(x.first) == targets.end())
             continue;
-        for (size_t i = 0; i < 1; i ++){
+        for (size_t i = chanTo; i < chanTo+1; i ++){
             runsPredictedTarget.push_back((double)(runToDateNumber(x.first)));
             runsPredictedTargetErr.push_back(0);
             //diffPredictedTarget.push_back( (x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
@@ -477,14 +595,15 @@ void drawTargetPredictionComparison(){
             if (fabs((x.second[i] - targets[x.first][i].first)/targets[x.first][i].second ) < 10)
                 ppredictedTarget->Fill(runToDateNumber(x.first),(x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
             //hpredictedTarget1D->Fill((x.second[i] - targets[x.first][i].first)/stdValues[meanValues.size()-24*2+i] );
-            hpredictedTarget1D->Fill((x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
+            //hpredictedTarget1D->Fill((x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
         }
     }
     vector<double> runsPredictedTargetP, diffPredictedTargetP, runsPredictedTargetErrP, diffPredictedTargetErrP;
     for (auto x: predictionsTest){
         if (targets.find(x.first) == targets.end())
             continue;
-        for (size_t i = 0; i < 1; i ++){
+        for (size_t i = chanTo; i < chanTo+1; i ++){
+        //for (size_t i = 0; i < 18; i ++){
             runsPredictedTargetP.push_back((double)(runToDateNumber(x.first)));
             runsPredictedTargetErrP.push_back(0);
             //diffPredictedTargetP.push_back( (x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
@@ -495,6 +614,7 @@ void drawTargetPredictionComparison(){
             if (fabs((x.second[i] - targets[x.first][i].first)/targets[x.first][i].second ) < 10)
                 ppredictedTarget->Fill(runToDateNumber(x.first),(x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
             //hpredictedTarget1D->Fill((x.second[i] - targets[x.first][i].first)/stdValues[meanValues.size()-24*2+i] );
+            hpredictedTarget1D->Fill((x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
         }
     }
 
@@ -538,13 +658,12 @@ void drawTargetPredictionComparison(){
     TGraph* std_dev_graph1 = new TGraph(x1.size(),&x1[0],&y1[0]);
     mean_graph->SetMarkerStyle(22);   mean_graph->SetMarkerSize(1.0);   mean_graph->SetLineColor(1);   mean_graph->SetMarkerColor(1);   mean_graph->SetLineWidth(4);
 
-
     cout << runsPredictedTarget.size() << endl;
 
     TGraphErrors* grPT = new TGraphErrors(runsPredictedTarget.size(),&runsPredictedTarget[0], &diffPredictedTarget[0], &runsPredictedTargetErr[0], &diffPredictedTargetErr[0]);
     TGraphErrors* grPTP = new TGraphErrors(runsPredictedTargetP.size(),&runsPredictedTargetP[0], &diffPredictedTargetP[0], &runsPredictedTargetErrP[0], &diffPredictedTargetErrP[0]);
     grPT->SetMarkerStyle(22);    grPT->SetMarkerSize(1.0);    grPT->SetLineColor(3);    grPT->SetMarkerColor(3);    grPT->SetLineWidth(4);
-    grPTP->SetMarkerStyle(22);   grPTP->SetMarkerSize(1.0);   grPTP->SetLineColor(1);   grPTP->SetMarkerColor(1);   grPTP->SetLineWidth(4);
+    grPTP->SetMarkerStyle(22);   grPTP->SetMarkerSize(1.0);   grPTP->SetLineColor(2);   grPTP->SetMarkerColor(2);   grPTP->SetLineWidth(4);
     
 
 
@@ -568,18 +687,18 @@ void drawTargetPredictionComparison(){
     pad->cd();
     pad->SetGridy();
 
-    gr2->SetTitle("Prediction vs Target calibration comparison;date;-dE/dx [MeV g^{-1} cm^{2}]");
+    gr2->SetTitle("Prediction vs Target calibration comparison;Date [day/month];-dE/dx [MeV g^{-1} cm^{2}]");
     //gr1->SetTitle("Prediction vs Target calibration comparison;date;-dE/dx [MeV g^{-1} cm^{2}]");
     //grP->SetTitle("Prediction vs Target calibration comparison;date;-dE/dx [MeV g^{-1} cm^{2}]");
     grPT->SetTitle("Prediction - Target;date;#sigma");
     grPTP->SetTitle("Prediction - Target;date;#sigma");
 
     TLegend *legend = new TLegend(0.7, 0.7, 0.9, 0.9);
-    //legend->AddEntry(gr2, "target calibration", "l");
+    legend->AddEntry(gr2, "Target with errors", "lp");
     //legend->AddEntry(gr1, "predicted, train dataset", "l");
     //legend->AddEntry(grP, "predicted, test dataset", "l");
-    legend->AddEntry(grPT, "train dataset", "l");
-    legend->AddEntry(grPTP, "test dataset", "l");
+    legend->AddEntry(grPT, "Predicted, training set", "lp");
+    legend->AddEntry(grPTP, "Predicted, test dataset", "lp");
 
     //hdTarget1D->SetLineColor(2);
     //hdTarget1D->Draw();
@@ -587,23 +706,31 @@ void drawTargetPredictionComparison(){
     //hpredictedTarget1D->Draw();
     //gr2->GetYaxis()->SetRangeUser(-5,5);
     gr2->Draw("AP");
-    //grMDCchan[0]->Draw("Psame");
-    //grMDCchan[2]->Draw("Psame");
+    //grMDCchan2->Draw("AP");
+    //grMDCchan[3]->Draw("Psame");
+    //grMDCchan[6]->Draw("AP");
+    //targetVsSource->Draw();
+    //hHvValues->Draw();
     //gr1->Draw("Psame");
     //grP->Draw("Psame");
     //gr1L->Draw("Psame");
     //grPL->Draw("Psame");
+    //grPT->Draw("AP");
     grPT->Draw("Psame");
     grPTP->Draw("Psame");
     //hpredictedTarget->SetDrawOption("colz");
-    //hpredictedTarget->Draw();
+    //hpredictedTarget->Draw("colz");
     //mean_graph->Draw("Psame");
     //std_dev_graph->GetYaxis()->SetRangeUser(-10,10);
     //std_dev_graph->Draw("APL");
     //std_dev_graph1->Draw("PLsame");
     //ppredictedTarget->Draw("same");
     //legend->Draw();
-
+    
     TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
     c->Update();
+
+    fileOut->cd();
+    hpredictedTarget1D->Write();
+    //fileOut->Close();
 }

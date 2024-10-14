@@ -3,6 +3,7 @@
 
 #include "workWithTrigger.h"
 #include "workWithDB.h"
+#include "workWithOracleDB.h"
 #include "neuralNetwork.h"
 #include "serverData.h"
 //#include "histsUpdater.h"
@@ -31,6 +32,7 @@ class ControllerBase {
     public:
         TriggerDataManager* triggerManager;
         EpicsDBManager* epicsManager;
+        OracleDBManager* oracleManager;
         NeuralNetwork* neuralNetwork;
         ServerData* serverData;
         //std::shared_ptr<ServerData> serverData;

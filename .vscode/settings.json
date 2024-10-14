@@ -67,6 +67,15 @@
         "typeinfo": "cpp",
         "iomanip": "cpp",
         "codecvt": "cpp",
-        "cinttypes": "cpp"
+        "cinttypes": "cpp",
+        "locale": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__tree": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "__bit_reference": "cpp",
+        "filesystem": "cpp",
+        "target": "cpp"
     }
 }

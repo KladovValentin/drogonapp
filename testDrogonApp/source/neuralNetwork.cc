@@ -14,7 +14,8 @@ using namespace dateRunF;
 
 NeuralNetwork::NeuralNetwork(){
     additionalFilter = {};
-    setupNNPredictions();
+    //setupNNPredictions();
+    //drawTargetSectorComparison();
 }
 NeuralNetwork::~NeuralNetwork(){
 }
@@ -423,18 +424,19 @@ void NeuralNetwork::drawInputTargetCorrelations(vector< vector<double> > targets
 
 
 void NeuralNetwork::drawTargetSectorComparison(){
-    vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");     
-
+    cout << "drawing target sector divided..." << endl;
+    vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModPreciseFit1.dat");     
+    cout << " a  " << endl;
     vector< vector<double> > arr[6];
     for (size_t s = 0; s < 6; s++){
         arr[s].resize(4,vector<double>(0));
         for (size_t i = 0; i < tableClbAll.size(); i++){
-            if (tableClbAll[i].second[0] != s)
+            if (tableClbAll[i].second[1] != s && tableClbAll[i].second[0] != 0)
                 continue;
             arr[s][0].push_back((tableClbAll[i].first));
-            arr[s][1].push_back(tableClbAll[i].second[1]);
+            arr[s][1].push_back(tableClbAll[i].second[2]);
             arr[s][2].push_back(0);
-            arr[s][3].push_back(tableClbAll[i].second[2]);
+            arr[s][3].push_back(tableClbAll[i].second[3]);
         }
     }
 
@@ -610,14 +612,14 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL.dat");
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCALL12.dat");
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1.dat");
-    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSecPrecise.dat");
-    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1zxc.dat");
+    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSecPrecise.dat");
+    //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1zxc.dat");
     cout << "a" << endl;
     vector< pair< int, vector<double> > > tableTrig = readClbTableFromFile(saveLocation+"info_tables/trigger_data2.dat");
     cout << "b" << endl;
-    vector< pair< int, vector<double> > > tableClb = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDC1New.dat");
-    vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCAllNew.dat"); 
-    vector< pair< int, vector<double> > > tableClbHH = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCHHNew.dat"); 
+    //vector< pair< int, vector<double> > > tableClb = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDC1New.dat");
+    //vector< pair< int, vector<double> > > tableClbAll = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCAllNew.dat"); 
+    //vector< pair< int, vector<double> > > tableClbHH = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCHHNew.dat"); 
     //cout << table[15].first << "    " << table[15].second[1] << endl;
     cout << "tableas are read" << endl;
 
@@ -625,15 +627,15 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     //vector< vector<double> > dbPars = dbTableToVectorsAveraged(table);
     vector< vector<double> > dbPars = clbTableToVectorsInput(table);
     vector< vector<double> > triggPars = clbTableToVectorsInput(tableTrig);
-    vector< vector<double> > meanToT = clbTableToVectorsTarget(tableClb);
-    vector< vector<double> > meanToTAll = clbTableToVectorsTarget(tableClbAll);
-    vector< vector<double> > meanToTHH = clbTableToVectorsTarget(tableClbHH);
+    //vector< vector<double> > meanToT = clbTableToVectorsTarget(tableClb);
+    //vector< vector<double> > meanToTAll = clbTableToVectorsTarget(tableClbAll);
+    //vector< vector<double> > meanToTHH = clbTableToVectorsTarget(tableClbHH);
 
     cout << "c" << endl;
-    vector< pair< int, vector<double> > > tableClbAllSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");
+    //vector< pair< int, vector<double> > > tableClbAllSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecAllNew.dat");
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModNew.dat");
-    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModzxc.dat");
-    //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModPrecise.dat");
+    //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModzxc.dat");
+    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile(saveLocation+"info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat");
     cout << "d" << endl;
     std::map< int, vector<double> > meanToTModSec = clbTableToVectorsTarget(tableClbModSec, outShape);
 
@@ -682,7 +684,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     bool writeFile = true;
     if (writeFile){
         ofstream ofNN;
-        ofNN.open(saveLocation+"nn_input/outNNTestSMzxcTest.dat"); //Test1
+        ofNN.open(saveLocation+"nn_input/outNNFitTarget.dat"); //Test1
         for (auto entry: meanToTModSec){
             int run = entry.first;
             auto p = std::find(dbPars[0].begin(), dbPars[0].end(), (double)run);
@@ -721,9 +723,9 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     if (!draw)
         return runsWritten;
     dbPars[0] = timeVectToDateNumbers(dbPars[0] );
-    meanToT[0]= timeVectToDateNumbers(meanToT[0]);
-    meanToTAll[0]= timeVectToDateNumbers(meanToTAll[0]);
-    meanToTHH[0]= timeVectToDateNumbers(meanToTHH[0]);
+    //meanToT[0]= timeVectToDateNumbers(meanToT[0]);
+    //meanToTAll[0]= timeVectToDateNumbers(meanToTAll[0]);
+    //meanToTHH[0]= timeVectToDateNumbers(meanToTHH[0]);
     triggPars[0]= timeVectToDateNumbers(triggPars[0]);
 
     // scaling
@@ -748,19 +750,18 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     TDatime da(2022,2,3,15,58,00);
     gStyle->SetTimeOffset(da.Convert());
 
-    cout << meanToTAll[0][0] << endl;
-    cout << meanToTAll[0][100] << endl << endl;
+    //cout << meanToTAll[0][0] << endl;
+    //cout << meanToTAll[0][100] << endl << endl;
 
-    TGraphErrors* grClb  = new TGraphErrors( 12000, &meanToT[0][0], &meanToT[1][0], &meanToT[2][0], &meanToT[2][0]);
-    TGraphErrors* grClbAll  = new TGraphErrors( 12000, &meanToTAll[0][0], &meanToTAll[1][0], &meanToT[2][0], &meanToT[2][0]);
-    TGraphErrors* grClbHH  = new TGraphErrors( 12000, &meanToT[0][0], &meanToTHH[1][0], &meanToT[2][0], &meanToT[2][0]);
+    //TGraphErrors* grClb  = new TGraphErrors( 12000, &meanToT[0][0], &meanToT[1][0], &meanToT[2][0], &meanToT[2][0]);
+    //TGraphErrors* grClbAll  = new TGraphErrors( 12000, &meanToTAll[0][0], &meanToTAll[1][0], &meanToT[2][0], &meanToT[2][0]);
+    //TGraphErrors* grClbHH  = new TGraphErrors( 12000, &meanToT[0][0], &meanToTHH[1][0], &meanToT[2][0], &meanToT[2][0]);
 
     //grClb->Draw("AP");
 
     //drawTrainPredictionComparison(meanToT[0], grClb);
 
     /// Check for stability of the calibration depending on selection criteria
-    //drawTargetSectorComparison();
     //TCanvas* cnvs = drawTargetDimensionsComp(meanToTModSec, outShape);
 
     //drawTargetStability(grClbAll,grClb,grClbHH);

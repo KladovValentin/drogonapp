@@ -22,8 +22,9 @@ ControllerBase::ControllerBase(){
     serverData = new ServerData();
     //serverData = std::make_shared<ServerData>();
     triggerManager = new TriggerDataManager();
-    epicsManager = new EpicsDBManager(serverData->getDbListeningPort());
+    //oracleManager = new OracleDBManager();
     neuralNetwork = new NeuralNetwork();
+    epicsManager = new EpicsDBManager(serverData->getDbListeningPort());
     
     triggerManager->changeHistsLocation(serverData->getTrHistsLoc());
     triggerManager->changeChannels(serverData->getTrChannels());
