@@ -1,12 +1,36 @@
+# Build and temporary files
+*.o
+*.log
+*.npy
+*.tmp
+*.bak
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# IDE/project files
+.vscode/
+.idea/
+*.swp
+
+# Environment and models
+env/
+*.onnx
+*.pth
+
+
 *parquet
 predicted**.txt
 *.root
+*.dat
 *.pcm
 runlist*
 runs*
 elapsed*
+out*
 
 testDrogonApp/serverData/info_tables/*
 testDrogonApp/serverData/histLists/*
 testDrogonApp/serverData/nn_input/*
+testDrogonApp/serverData/qaHists/*
 testDrogonApp/serverData/function_prediction/prediction/*
