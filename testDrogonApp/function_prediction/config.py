@@ -3,6 +3,6 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     modelType = "gConvLSTM" # DNN / LSTM
-    sentenceLength = 3
+    sentenceLength = 1
     cellsLength = 24
-    channelsLength = 7
+    channelsLength = 9

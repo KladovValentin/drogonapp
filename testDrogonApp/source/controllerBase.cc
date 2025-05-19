@@ -32,10 +32,6 @@ ControllerBase::ControllerBase(){
 
     serverData->setContinuousPredictionRunning(true);
 
-    sentenceLength = 5;
-    nodesLength = 24;
-    inChannelsLength = 7;
-
     //out = new TFile("outHome.root","RECREATE");
     //out->cd();
 
@@ -355,7 +351,7 @@ vector<float> ControllerBase::moveForwardCurrentNNInput(){
     long long elapsed4 = 0;
     long long elapsed5 = 0;
     //cout << "curr " << currentNNInput.size() << endl;
-    if (currentNNInput.size() < nodesLength*inChannelsLength*sentenceLength){
+    if (currentNNInput.size() < 24*9*5){
         currentNNInput = makeNNInputTensor(currentRun);
         currentRunIndex = currentRunIndex+1;
         currentRun = nextRun;

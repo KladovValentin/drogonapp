@@ -57,11 +57,14 @@ namespace dateRunF {
     extern void saveRunNumbers(string expFilesLocation);
     extern vector<int> loadrunlist(int run1, int run2);
 
+    extern vector< pair<int,int> > loadrunlistWithEnds(int run1, int run2);
+
     extern vector<TString> getlistOfFileNames(TString inDir); 
 };
 
 namespace preTrainFunctions {
     extern vector< pair< int, vector<double> > > readClbTableFromFile(string fName);
+    extern vector< pair< int, vector<double> > > readClbTableFromFileExtended(string fName);
     extern vector< pair< string, vector<double> > > readDBTableFromFile(string fName);
     extern vector< vector<double> > clbTableToVectorsTarget(vector< pair< int, vector<double> > > intable);
     extern map< int, vector<double> > clbTableToVectorsTarget(vector< pair< int, vector<double> > > intable, vector<int> shape);

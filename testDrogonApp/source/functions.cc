@@ -1,6 +1,8 @@
 #include "../include/functions.h"
 
-#include "../include/constants.h"
+//#include "../include/constants.h"
+
+const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
 
 using namespace std;
 
@@ -423,7 +425,8 @@ void dateRunF::saveRunNumbers(string expFilesLocation){
 vector<int> dateRunF::loadrunlist(int run1, int run2){
     vector<int> result;
     ifstream fin1;
-	fin1.open((saveLocation+"runlistzxc.dat").c_str());
+	//fin1.open((saveLocation+"runlistzxc.dat").c_str());
+    fin1.open((saveLocation+"runlist.dat").c_str());
     int run = 0;
     while (fin1 >> run){
         if (run <= run1 || run >= run2)
@@ -433,6 +436,25 @@ vector<int> dateRunF::loadrunlist(int run1, int run2){
     fin1.close();
     return result;
 }
+
+
+vector< pair<int,int> > dateRunF::loadrunlistWithEnds(int run1, int run2){
+    vector< pair<int,int> > result;
+    ifstream fin1;
+	//fin1.open((saveLocation+"runlistzxc.dat").c_str());
+    //fin1.open((saveLocation+"runlist.dat").c_str());
+    //fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runList.dat");
+    fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runListCosmics106.dat");
+    int run = 0; int runEnd = 0;
+    while (fin1 >> run >> runEnd){
+        if (run <= run1 || runEnd >= run2)
+            continue;
+        result.push_back(std::make_pair(run,runEnd));
+    }
+    fin1.close();
+    return result;
+}
+
 
 
 
@@ -449,6 +471,30 @@ vector< pair< int, vector<double> > > preTrainFunctions::readClbTableFromFile(st
         ss >> run;
         while (ss >> value) {
             vars.push_back(value);
+        }
+        result.push_back(make_pair(run,vars));
+    }
+    fin1.close();
+    return result;
+}
+
+vector< pair< int, vector<double> > > preTrainFunctions::readClbTableFromFileExtended(string fName){
+    vector< pair< int, vector<double> > > result;
+    ifstream fin1;
+	fin1.open(fName.c_str());
+    string line;
+	while (std::getline(fin1, line)){
+        double run = 0;
+        vector<double> vars;
+        std::stringstream ss(line);
+        double value;
+        ss >> run;
+        for (size_t i = 0; i < 10; i++){
+            std::getline(fin1, line);
+            std::stringstream ss1(line);
+            while (ss1 >> value) {
+                vars.push_back(value);
+            }
         }
         result.push_back(make_pair(run,vars));
     }
@@ -521,26 +567,25 @@ std::map< int, vector<double> > preTrainFunctions::clbTableToVectorsTarget(vecto
         shapeSize = 0;
     int outShapeLength = 1; for (int x: shape){ outShapeLength*=x; }
 
-    cout << "ststs" << endl;
-
-    for (size_t i = 0; i < intable.size(); i=i+outShapeLength){
-        if (i+outShapeLength >= intable.size()){
+    for (size_t i = 0; i < intable.size(); i=i+outShapeLength){     //as there are lines for each node, we have to go through them and combine in one line
+        if (i+outShapeLength > intable.size()){
             break;
         }
         map<int,int> runsRun;
         for (size_t j = 0; j < outShapeLength; j++){
             runsRun[intable[i+j].first] = intable[i+j].first;
         }
-        if (runsRun.size() > 1){
-            break;
+        if (runsRun.size() > 1){   
+            break;    // check if there are 2 runs in a nondes_length segment (should be one line for node, related to each run)
         }
 
         vector<double> meanValues;
+        //meanValues.push_back(intable[i].second[0]);                    // end run case
         for (size_t j = 0; j < outShapeLength; j++){
-            meanValues.push_back(intable[i+j].second[shapeSize]);
+            meanValues.push_back(intable[i+j].second[shapeSize+1]);    // +1 only for end run (shapeSize for m+s)
         }
         for (size_t j = 0; j < outShapeLength; j++){
-            meanValues.push_back(intable[i+j].second[shapeSize+1]);
+            meanValues.push_back(intable[i+j].second[shapeSize+1+1]);  // extra +1 from error and another from end run
         }
         arr[intable[i].first] = meanValues;
     }

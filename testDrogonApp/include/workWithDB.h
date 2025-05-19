@@ -11,6 +11,7 @@
 #include <sstream>
 #include <vector>
 #include <filesystem>
+#include <numeric>
 
 #include "TString.h"
 #include "TGraph.h"
@@ -51,13 +52,16 @@ class EpicsDBManager {
         void changeChannelNames(vector<size_t> shapeNew, vector< pair <vector<int>, string> > dbnamesNew);
         void changeListeningPort(int newPort);
 
-        vector<double> getDBdataBase(string command, string dateLeft);        
+        vector<double> getDBdataBase(string command, string dateLeft, string dateLimit);        
         vector<double> getDBdata(int nLast, string channel);
         vector<double> getDBdata(int run, int runnext);
         vector<double> getDBdata(string date1, string date2);
+        vector<double> getDBdata(string date1, string date2, string dateLimit);
 
         void appendDBTable(string mode, int runl, vector<double> dbPars);
         void makeTableWithEpicsData(string mode, int runl, int runr);
+        void makeTableWithEpicsDataExtended(string mode, int runl, int runr, string fileName);
+        void makeTableWithEpicsDataContinuousSplit(string mode, int runl, int runr, string fileName);
 };
 
 

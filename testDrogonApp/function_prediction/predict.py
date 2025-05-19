@@ -11,11 +11,9 @@ import pandas
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-from models.model import DNN
-from models.model import LSTM
 from models.model import Conv2dLSTM
 from models.model import GCNLSTM
-from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset, readTrainData
+from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset, readTrainData, compute_scaling_factor
 from torch.utils.data import Dataset, SubsetRandomSampler, DataLoader
 from tqdm.auto import tqdm
 from tqdm import trange
@@ -23,22 +21,15 @@ from config import Config
 import torch.jit
 
 
-mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
-dataManager = DataManager(mainPath)
-
 
 def loadModel(config, input_dim, nClasses, path, e_i=0,e_a=0):
-    if (config.modelType == "DNN"):
-        nn_model = DNN(input_dim=input_dim[-1], output_dim=nClasses, nLayers=3, nNeurons=200).type(torch.FloatTensor)
-    elif (config.modelType == "LSTM"):
-        nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
-    elif (config.modelType == "ConvLSTM"):
+    if (config.modelType == "ConvLSTM"):
         nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1)
     elif (config.modelType == "gConvLSTM"):
-        #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-        nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1)
+        nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=8, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
+        #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1)
     nn_model.type(torch.FloatTensor)
-    nn_model.load_state_dict(torch.load(path+"tempModel.pt"))
+    nn_model.load_state_dict(torch.load(path+"tempModelT.pt"))
     nn_model.eval()
 
     if (config.modelType == "DNN"):
@@ -63,6 +54,7 @@ def loadModel(config, input_dim, nClasses, path, e_i=0,e_a=0):
     #scripted_model.save("gcn_model.pt")
     #torch.jit.save(torch.jit.script(nn_model), 'gcn_model.pt')
     return nn_model
+
 
 def constructPredictionFrame(index,nparray):
     # return new DataFrame with 4 columns corresponding to probabilities of resulting classes and 5th column to chi2 
@@ -127,20 +119,22 @@ def getHV(model,X):
 
 def makePredicionList(config, experiment_path, savePath, path):
     dftCorr = pandas.read_parquet(path+ experiment_path+'.parquet')
-    dftCorr = dataManager.normalizeDataset(dftCorr)
+    #dftCorr = dataManager.normalizeDatasetNormal(dftCorr)
+    dftCorr = dataManager.normalizeDatasetScale(dftCorr)
     dftCorr.reset_index(drop=True, inplace=True)
     print("<ASDSADSAD")
     print(dftCorr)
     dftCorr.rename(columns={list(dftCorr.columns)[0] : 'run'}, inplace=True)
     runColumn = dftCorr['run']
 
-    dftCorrExp = dftCorr.drop(list(dftCorr.columns)[0],axis=1).copy()
-    exp_dataset = My_dataset(load_dataset(config, dftCorrExp))
-    if (config.modelType == "gConvLSTM"):
-        xt, yt, e_i, e_a = load_dataset(config,dftCorrExp)
-        exp_dataset = My_dataset((xt,yt))
-        #exp_dataset = Graph_dataset(load_dataset(config, dftCorrExp))
-    exp_dataLoader = DataLoader(exp_dataset, batch_size=512, drop_last=False)
+    #dftCorrExp = dftCorr.drop('run',axis=1).copy()             
+    dftCorrExp = dftCorr.copy()
+    #exp_dataset = My_dataset(load_dataset(config, dftCorrExp))
+    #if (config.modelType == "gConvLSTM"):
+    xt, yt, e_i, e_a = load_dataset(config,dftCorrExp)
+    exp_dataset = My_dataset((xt,yt))
+    #exp_dataset = Graph_dataset(load_dataset(config, dftCorrExp))
+    exp_dataLoader = DataLoader(exp_dataset, batch_size=256, drop_last=False)
 
     mean, std = readTrainData(path,"")
     #mean = mean[-6:]
@@ -154,31 +148,22 @@ def makePredicionList(config, experiment_path, savePath, path):
     print("input shape is ",input_dim)
 
     #load nn and predict
-    #if (config.modelType == "gConvLSTM"):
-    #    nn_model = loadModel(config, input_dim, nClasses, path,e_i=e_i,e_a=e_a)
+    if (config.modelType == "gConvLSTM"):
+        nn_model = loadModel(config, input_dim, nClasses, path, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
     #else:
-    nn_model = loadModel(config, input_dim, nClasses, path)
+    #nn_model = loadModel(config, input_dim, nClasses, path)
     nn_model.eval()
 
     dat_list = []
     hv_list = []
     stable_dat_list = []
     tepoch = tqdm(exp_dataLoader)
-    #inpvect = np.array([-0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, 1.15, 1.19213, 1.28335, 1.69697, 1.50619, 1.43025, 0.114225, 1.2106, 0.557263, 0, 0, -0.577436, 1.20882, 1.2026, 1.11423, 0.922802, 1.2895, 1.31063, 1.86656, 1.04046, 1.25881, -0.913003, 1.24629, 1.23368, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, 1.15, 1.19213, 1.28335, 1.69697, 1.50619, 1.43025, 0.114225, 1.2106, 0.557263, 0, 0, -0.577436, 1.20882, 1.2026, 1.11423, 0.922802, 1.2895, 1.31063, 1.86656, 1.04046, 1.25881, -0.913003, 1.24629, 1.23368, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.66185, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, -1.4922, 1.15, 1.19213, 1.28335, 1.69697, 1.50619, 1.43025, 0.114225, 1.2106, 0.557263, 0, 0, -0.577436, 1.20882, 1.2026, 1.11423, 0.922802, 1.2895, 1.31063, 1.86656, 1.04046, 1.25881, -0.913003, 1.24629, 1.23368, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -2.24606, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.510324, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.65991, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, -1.5022, 1.01647, 1.22912, 1.08716, 1.45236, 1.41305, 1.36161, 0.124045, 1.14602, 0.576243, 0, 0, -0.649008, 1.21491, 1.2118, 1.10974, 0.907692, 1.3059, 1.28224, 1.83982, 1.02719, 1.25147, -0.889066, 1.2379, 1.2288, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -2.23603, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.627079, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.655752, -0.00819975, -0.0103306, -0.00819975, 0.00905479, 0.00596417, 0.0414289, -1.69931, -2.39766, -0.262997, -1.67573, -1.53179, -1.70409, 0, 0, 0, 0, 0, 0, 0.0106431, 0, 0, 0, 0, 0, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, -1.43841, 1.11889, 1.24665, 1.2449, 1.48192, 1.58487, 1.47091, 0.0309097, 1.2089, 0.552984, 0, 0, -0.623491, 1.21062, 1.21796, 1.11977, 0.892438, 1.29838, 1.28405, 1.823, 1.0153, 1.25138, -0.945185, 1.2379, 1.2335, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, 22.0054, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -2.21249, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924, -0.416924])
-    #inpvect = inpvect.reshape((1,5,7,24)).astype(np.float32)
-    #inptens = torch.tensor(inpvect)
-    #singtp = (nn_model(inptens).detach().numpy())[:,-1,:]
-    #for i in range(24):
-    #    singtp[:,i] = singtp[:,i]*std[-2*24+i] + mean[-2*24+i]
-    #print(singtp)
+    
     print("")
     print("")
     for i_step, (x, y) in enumerate(tepoch):
         tepoch.set_description(f"Epoch {1}")
-        if (config.modelType == "LSTM"):
-            prediction = (nn_model(x).detach().numpy()[:,-1])*std[-24] + mean[-24]
-            print(prediction.shape)
-        elif(config.modelType == "ConvLSTM"):
+        if(config.modelType == "ConvLSTM"):
             prediction = (nn_model(x).detach().numpy())[:,-1,:]
             n_nodes = input_dim[-2]
             for i in range(n_nodes):
@@ -188,16 +173,18 @@ def makePredicionList(config, experiment_path, savePath, path):
             #print(x)
             prediction = (nn_model(x).detach().numpy())[:,-1,:]
             #predictedHV, predictionWithHV = getHV(nn_model,x)
-            n_nodes = input_dim[-1]
-            for i in range(n_nodes):
-                prediction[:,i] = prediction[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
+            n_nodes = config.cellsLength
+            for i in range(input_dim[-1]):
+                #prediction[:,i] = prediction[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
+                prediction[:,i] = prediction[:,i]*compute_scaling_factor(mean[-2*n_nodes+i])
+                #prediction[:,i] = prediction[:,i]*std[-24*2+i] + mean[-24*2+i]
             #print(prediction)
         dat_list.append(pandas.DataFrame(prediction))
         #hv_list.append(pandas.DataFrame(predictedHV))
         #stable_dat_list.append(pandas.DataFrame(predictionWithHV))
 
     fullPredictionList = pandas.concat(list(dat_list),ignore_index=True)
-    pq.write_table(pa.Table.from_pandas(fullPredictionList), path + "predicted/" + savePath+'.parquet')
+    pq.write_table(pa.Table.from_pandas(fullPredictionList), path + "predicted/" + savePath + '.parquet')
 
     #print(runColumn)
     #print(fullPredictionList)
@@ -268,6 +255,9 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
     nptable = dftable.to_numpy()
     nptable2 = dftable2.to_numpy()
 
+    print(nptable.shape)
+    print(nptable2.shape)
+
 
     mean, std = readTrainData(path,"")
     for i in range(1):
@@ -326,6 +316,7 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     dftCorrExpS = pandas.read_parquet(experiment_pathS+'.parquet').reset_index(drop=True)
     pTS.rename(columns={list(pTS.columns)[0] : '0'}, inplace=True)
 
+
     localCNames = list(dftCorrExpS.columns)
     for i in range(len(localCNames)-1-2*nNodes):
         dftCorrExpS.drop(localCNames[i+1],axis=1,inplace=True)
@@ -352,12 +343,22 @@ def predict_cicle(testNum):
     predict_nn("tesu",'predicted1_'+str(testNum), path)
     predict_nn("simu",'predicted_'+str(testNum), path)
 
+
 mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
+dataManager = DataManager(mainPath)
 path = mainPath+"function_prediction/"
 
 #print("start python predict")
-#test = 9
-#predict_nn("tesu",'predicted1_'+str(test), path)
-#predict_nn("simu",'predicted_'+str(test), path)
-#analyseOutput(path+"predicted1_"+str(test),path+"tesu", path+"predicted_"+str(test),path+"simu")
+test = 0
+predict_nn("tesu",'predicted1_'+str(test), path)
+predict_nn("simu",'predicted_'+str(test), path)
+
+#analyseOutput(path+"predicted/predicted1_"+str(test),path+"tesu", path+"predicted/predicted_"+str(test),path+"simu")
 #analyseOutput(path+"predictedSim.parquet",path+"simu.parquet")
+
+
+#predict_nn("tesuCosmic",'predictedCosmics1_', path)
+#predict_nn("simuCosmic",'predictedCosmics_', path)
+
+#analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
+#analyseOutput(path+"predictedCosmics.parquet",path+"simu.parquet")

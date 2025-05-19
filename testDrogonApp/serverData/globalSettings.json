@@ -18,10 +18,10 @@
 			]
 		},
 		{
-			"name" : "HAD:MDC:GAS:CO2:concentration",
+			"name" : "HAD:MDC:GAS:P%d:CO2:concentration",
 			"parameters" : 
 			[
-				0,
+				1,
 				0
 			]
 		},
@@ -56,12 +56,28 @@
 				0,
 				0
 			]
+		},
+		{
+			"name" : "HAD:MDC:GAS:P34:binaryGassensor",
+			"parameters" : 
+			[
+				0,
+				0
+			]
+		},
+		{
+			"name" : "HAD:MDC:GAS:reflowInO2",
+			"parameters" : 
+			[
+				0,
+				0
+			]
 		}
 	],
 	"port" : 3335,
 	"shape" : 
 	[
-		7,
+		9,
 		4,
 		6
 	],

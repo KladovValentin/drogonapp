@@ -76,6 +76,9 @@
         "stack": "cpp",
         "__bit_reference": "cpp",
         "filesystem": "cpp",
-        "target": "cpp"
+        "target": "cpp",
+        "__nullptr": "cpp",
+        "__functional_03": "cpp",
+        "__string": "cpp"
     }
 }

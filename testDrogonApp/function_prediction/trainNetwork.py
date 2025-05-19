@@ -16,12 +16,10 @@ import pyarrow.parquet as pq
 from tqdm.auto import tqdm
 from tqdm import trange
 from pympler import asizeof
-from models.model import DNN
-from models.model import LSTM
 from models.model import Conv2dLSTM
 from models.model import GCNLSTM
 from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset
-from predict import predict_cicle
+#from predict import predict_cicle
 
 
 """
@@ -43,7 +41,9 @@ class CustomMSELoss(nn.Module):
 
     def forward(self, predictions, targets):
         squared_errors = torch.pow(predictions - targets[:,:,0,:], 2)
-        normalized_errors = squared_errors / torch.pow(targets[:,:,1,:], 2)
+        clipped_sigmas = torch.where(targets[:,:,1,:] < 0.1, torch.ones_like(targets[:,:,1,:]), targets[:,:,1,:])
+        normalized_errors = squared_errors / torch.pow(clipped_sigmas, 2)
+        #normalized_errors = squared_errors / targets[:,:,1,:]
         #print(normalized_errors)
         loss = torch.mean(normalized_errors)
         #print(loss)
@@ -106,21 +106,25 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
 
             #running_loss = loss(prediction[:,14,:], y[:,14,:])
             #print(y[0])
-            running_loss = loss(prediction0, y[:,:,0,:])
+            #running_loss = loss(prediction0[:,:,:], y[:,:,0,:])
+            #running_loss = loss(prediction0[:,-1,:], y[:,-1,0,:])
+            running_loss = loss(prediction0[:,:,:], y[:,:,0,:])
+            #running_loss = loss(prediction0[:,:,:], y[:,:,:,:])
             running_loss.backward()
             optimizer.step()
 
             optimizer.zero_grad()
             
             prediction = model(x)
-            yAccTest = y[:,:,0,:]
+            yAccTest = y[:,-1,0,:]
+            #yAccTest = y[:,0,:]
             fullYAmount = yAccTest.shape[0]
             if (yAccTest.ndim>1):
                 for i in range(yAccTest.ndim-1):
                     fullYAmount *= yAccTest.shape[i+1] 
             fulfulYAmount+=fullYAmount
-            #running_acc = torch.sum( ((prediction[:,14,:]-y[:,14,:])>-0.3) & ((prediction[:,14,:]-y[:,14,:])<0.3) )/ fullYAmount
-            running_acc = torch.sum( ((prediction-yAccTest)>-0.3) & ((prediction-yAccTest)<0.3) )
+            running_acc = torch.sum( ((prediction[:,-1,:]-yAccTest)>-0.03) & ((prediction[:,-1,:]-yAccTest)<0.03) )
+            #running_acc = torch.sum( ((prediction-yAccTest)>-0.3) & ((prediction-yAccTest)<0.3) )
             #print(running_acc)
             accuracy_train += running_acc
             loss_train += float(running_loss)
@@ -146,15 +150,19 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
                 #print(y)
                 prediction1 = model(xval)
                 xv0 = prediction1.clone()
-                validLosses.append(float(loss(prediction1, yval[:,:,0,:])))
+                #validLosses.append(float(loss(prediction1, yval[:,:,0,:])))
+                #validLosses.append(float(loss(prediction1[:,-1,:], yval[:,-1,0,:])))
+                validLosses.append(float(loss(prediction1[:,:,:], yval[:,:,0,:])))
+                #validLosses.append(float(loss(prediction1[:,:,:], yval[:,:,:,:])))
 
-                yAccTest = yval[:,:,0,:]
+                yAccTest = yval[:,-1,0,:]
+                #yAccTest = yval[:,0,:]
                 fullYAmount = yAccTest.shape[0]
                 if (yAccTest.ndim>1):
                     for i in range(yAccTest.ndim-1):
                         fullYAmount *= yAccTest.shape[i+1] 
                 fulfulYAmount+=fullYAmount
-                validAccuracies.append(torch.sum( ((prediction1-yAccTest)>-0.3) & ((prediction1-yAccTest)<0.3) ))
+                validAccuracies.append(torch.sum( ((prediction1[:,-1,:]-yAccTest)>-0.03) & ((prediction1[:,-1,:]-yAccTest)<0.03) ))
                 #print(validAccuracies[-1])
 
             loss_valid = np.mean(np.array(validLosses))
@@ -201,7 +209,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
     datasetMod = "train_nn"
     if (transferTraining):
         datasetMod = "test_nn"   #keep mean and std from before
-    dataManager.manageDataset(datasetMod,ind)
+    #dataManager.manageDataset(datasetMod,ind)
     
     f = open(mainPath+"function_prediction/trainresults1.txt", "w")
 
@@ -209,45 +217,52 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         batch_size, lr, nNeurons, nLayers, weight_decay = varyHyperparameters()
         print(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay))
         
-        batch_size = 512 #50000 #512
-        weight_decay = 0.003
-        lr = 0.02
-        epochs = 120
+        batch_size = 256 #50000 #512
+        weight_decay = 0.000
+        lr = 0.005
+        epochs = 100
         if (transferTraining):
-            lr = 0.001
-            epochs = 15
+            lr = 0.0004
+            epochs = 10
             #weight_decay = 0.0005
-            weight_decay = 0.03
+            weight_decay = 0.0001
         nLayers = 1
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
-        fullset = dataManager.normalizeDataset(fullset)
-        fullset.drop(list(fullset.columns)[0],axis=1,inplace=True) #drop indices
+        #fullset = dataManager.normalizeDatasetNormal(fullset)
+        fullset = dataManager.normalizeDatasetScale(fullset)
+        #fullset.drop(list(fullset.columns)[0],axis=1,inplace=True) #drop indices
         print(fullset)
         #dftCorr = fullset.sample(frac=1.0).reset_index(drop=True) # shuffling
         dftCorr = fullset.reset_index(drop=True)
-        print(dftCorr)
-        #dataTable = dftCorr.sample(frac=0.8).sort_index()
-        dataTable = dftCorr#.sort_index()
-        print(dataTable)
-        validTable = dataTable.copy()#dftCorr.drop(dataTable.index)
+        #print(dftCorr)
+        #if transferTraining:
+        #dataTable = dftCorr#.sort_index()
+        #validTable = dataTable.copy()
+        #else:
+        
+        dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*1.0)].copy()
+        validTable = dftCorr.drop(dataTable.index)
 
-        print(dataTable)
         
         if (config.modelType == "gConvLSTM"):
             xt, yt, e_i, e_a = load_dataset(config,dataTable)
             xv, yv, _, _ = load_dataset(config,validTable)
             shuffled_indicest = np.random.permutation(xt.shape[0])
+            shuffled_indicest1 = np.random.permutation(xv.shape[0])
+            #print(shuffled_indicest)
             xt = xt[shuffled_indicest]
             yt = yt[shuffled_indicest]
+            xv = xv[shuffled_indicest1]
+            yv = yv[shuffled_indicest1]
             train_dataset = My_dataset((xt,yt))
             valid_dataset = My_dataset((xv,yv))
         else:
             xt, yt = load_dataset(config, dataTable)
             xv, yv = load_dataset(config,validTable)
             shuffled_indicest = np.random.permutation(xt.shape[0])
-            xt = xt[shuffled_indicest]
-            yt = yt[shuffled_indicest]
+            #xt = xt[shuffled_indicest]
+            #yt = yt[shuffled_indicest]
             train_dataset = My_dataset((xt,yt))
             valid_dataset = My_dataset((xv,yv))
 
@@ -264,15 +279,11 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
 
         del validTable, valid_dataset
 
-        if (config.modelType == "DNN"):
-            nn_model = DNN(input_dim=input_dim[-1], output_dim=1, nLayers=nLayers, nNeurons=nNeurons).type(torch.FloatTensor)
-        elif (config.modelType == "LSTM"):
-            nn_model = LSTM(input_dim=input_dim[-1], embedding_dim=64, hidden_dim=64, output_dim=1, num_layers=1, sentence_length=input_dim[0]).type(torch.FloatTensor)
-        elif (config.modelType == "ConvLSTM"):
+        if (config.modelType == "ConvLSTM"):
             nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(5,5), num_layers=1, bias=0, output_size=1) #16 16
         elif (config.modelType == "gConvLSTM"):
             #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-            nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1)
+            nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=8, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
 
             n_nodes = input_dim[-1]
             in_channels = input_dim[-2]
@@ -281,18 +292,20 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             #torch.export.save(exported_program, 'exported_gConvLSTM.pt2')
 
         if (transferTraining):
-            nn_model.load_state_dict(torch.load(mainPath+"function_prediction/tempModel.pt"))
+            nn_model.load_state_dict(torch.load(mainPath+"function_prediction/tempModelT.pt"))
             nn_model.train()
             # Freeze the lower layers
             for name, param in nn_model.named_parameters():
                 #if "gcn_cell_list" in name:  # Adjust the condition based on your model's naming convention
-                if "nn_model." in name:  # Adjust the condition based on your model's naming convention
+                #if "nn_model." in name or "nn_model2." in name:  # Adjust the condition based on your model's naming convention
+                #if "nn_model." in name or "gcn_cell" in name or "scale_shift" in name:  # Adjust the condition based on your model's naming convention
+                if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name:
                     param.requires_grad = True
                 else:
                     param.requires_grad = False
 
-        for name, param in nn_model.named_parameters():
-            print(name, param.requires_grad)
+        #for name, param in nn_model.named_parameters():
+        #    print(name, param.requires_grad)
 
         loss = nn.MSELoss()
         #loss = CustomMSELoss()
@@ -311,14 +324,10 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         f.write(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay) + " " + str(100*loc_acc) + "\n")
 
         nn_model.eval()
-        torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModel.pt")
+        torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModelT.pt")
         #nn_model = torch.jit.script(nn_model)
 
-        if (config.modelType == "DNN"):
-            modelRandInput = torch.randn(1, input_dim[-1])
-        elif (config.modelType == "LSTM"):
-            modelRandInput = torch.randn(1, input_dim[0], input_dim[-1])
-        elif (config.modelType == "ConvLSTM"):
+        if (config.modelType == "ConvLSTM"):
             modelRandInput = torch.randn(1, input_dim[0], input_dim[-3], input_dim[-2], input_dim[-1])
         elif (config.modelType == "gConvLSTM"):
             n_nodes = input_dim[-1]
@@ -352,11 +361,22 @@ def varyHyperparameters():
 
 print("start_train_python")
 
+dataManager.manageDataset("train_nn",0)
+#dataManager.manageDataset("test_nn",0)
+#dataManager.manageDatasetCosmics("train_nn",0)
+#dataManager.manageDatasetCosmics("test_nn",0)
+
+#dataManager.manageDataset("test_nn",0)
 train_NN(0,False,mainPath)
 #train_NN(0,True,mainPath)
-predict_cicle(0)
+
+#train_NN(0,True,mainPath,"simuCosmic.parquet")
+#train_NN(0,False,mainPath,"simuCosmic.parquet")
+
+#dataManager.manageDataset("test_nn",0)
+#predict_cicle(0)
 
 
-for i in range(50):
-    train_NN(i+1,True,mainPath)
-    predict_cicle(i+1)
+#for i in range(20):
+#    train_NN(i+1,True,mainPath)
+#    predict_cicle(i+1)
