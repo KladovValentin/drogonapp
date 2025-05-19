@@ -20,7 +20,6 @@ env/
 
 
 *parquet
-predicted**.txt
 *.root
 *.dat
 *.pcm
@@ -28,6 +27,7 @@ runlist*
 runs*
 elapsed*
 out*
+predicted**.txt
 
 testDrogonApp/serverData/info_tables/*
 testDrogonApp/serverData/histLists/*
