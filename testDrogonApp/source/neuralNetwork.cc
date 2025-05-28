@@ -667,7 +667,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     //vector< pair< int, vector<double> > > table = readClbTableFromFileExtended(saveLocation+"info_tables/MDCModSecPreciseExtended.dat");  // ! main stuff feb22 the best now
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSecPreciseFeb22ends9.dat");          // ! test feb22 with averaging until run ends and 9 inputs + CO2 concentration split (1,2, 34)
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSecPreciseCosmic25VaryHV1.dat");
-    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSecPreciseCosmic25_106VaryHVends9.dat");
+    vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSecPreciseCosmic25_56VaryHVends9.dat");
 
     //vector< pair< int, vector<double> > > table = readClbTableFromFile(saveLocation+"info_tables/MDCModSec1zxc.dat");
     cout << "a" << endl;
@@ -695,8 +695,8 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOut.dat");
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative4.dat");     //10 minutes last
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative3.dat");   //30 minutes last
-    //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative2properPars.dat");   //56 full runs last 16 05
-    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative100_2properPars.dat");   //106 full runs last 16 05
+    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative2properPars.dat");   //56 full runs last 16 05
+    //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative100_2properPars.dat");   //106 full runs last 16 05
     
     cout << "d" << endl;
     std::map< int, vector<double> > meanToTModSec = clbTableToVectorsTarget(tableClbModSec, outShape);
@@ -749,7 +749,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
         //ofNN.open(saveLocation+"nn_input/outNNFitTargetExtended.dat"); //Test1
         //ofNN.open(saveLocation+"nn_input/outNNFitTargetRunEnds9pars.dat"); //Test1
         //ofNN.open(saveLocation+"nn_input/outNNFitTargetCosmic25_10mins.dat"); //cosmic 10 minutes
-        ofNN.open(saveLocation+"nn_input/outNNFitTargetCosmic25_106_9.dat"); //cosmic 30 minutes
+        ofNN.open(saveLocation+"nn_input/outNNFitTargetCosmic25_56_9.dat"); //cosmic 30 minutes
         for (auto entry: meanToTModSec){
             int run = entry.first;
             //cout << run << endl;
@@ -801,7 +801,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
                     }
                 }
                 //if (indicesToAverage.size() == 0 || nextTargetRun-run < 200)
-                if (nextTargetRun-run < 1000)   //20 for beam time
+                if (nextTargetRun-run < 350)   //20 for beam time
                     continue;
 
                 //cout << run << endl;

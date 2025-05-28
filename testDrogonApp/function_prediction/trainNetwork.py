@@ -117,13 +117,14 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
             
             prediction = model(x)
             yAccTest = y[:,-1,0,:]
+            #print((prediction[0,-1,0],yAccTest[0,0]))
             #yAccTest = y[:,0,:]
             fullYAmount = yAccTest.shape[0]
             if (yAccTest.ndim>1):
                 for i in range(yAccTest.ndim-1):
                     fullYAmount *= yAccTest.shape[i+1] 
             fulfulYAmount+=fullYAmount
-            running_acc = torch.sum( ((prediction[:,-1,:]-yAccTest)>-0.03) & ((prediction[:,-1,:]-yAccTest)<0.03) )
+            running_acc = torch.sum( ((prediction[:,-1,:]-yAccTest)>-0.1) & ((prediction[:,-1,:]-yAccTest)<0.1) )
             #running_acc = torch.sum( ((prediction-yAccTest)>-0.3) & ((prediction-yAccTest)<0.3) )
             #print(running_acc)
             accuracy_train += running_acc
@@ -162,7 +163,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
                     for i in range(yAccTest.ndim-1):
                         fullYAmount *= yAccTest.shape[i+1] 
                 fulfulYAmount+=fullYAmount
-                validAccuracies.append(torch.sum( ((prediction1[:,-1,:]-yAccTest)>-0.03) & ((prediction1[:,-1,:]-yAccTest)<0.03) ))
+                validAccuracies.append(torch.sum( ((prediction1[:,-1,:]-yAccTest)>-0.1) & ((prediction1[:,-1,:]-yAccTest)<0.1) ))
                 #print(validAccuracies[-1])
 
             loss_valid = np.mean(np.array(validLosses))
@@ -199,6 +200,10 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
     
     return accuracy_valid
 
+def reset_weights(m):
+    if isinstance(m, nn.Linear):
+        m.reset_parameters()
+
 def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
     from config import Config
     config = Config()
@@ -222,8 +227,13 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         lr = 0.005
         epochs = 100
         if (transferTraining):
-            lr = 0.0004
-            epochs = 10
+            #lr = 0.02
+            lr = 0.01
+            if (ind == 0):
+                epochs = 200  #cosmic
+            #epochs = 40  #new beam time
+            if (ind == 1):
+                epochs = 60  #going back from cosmic
             #weight_decay = 0.0005
             weight_decay = 0.0001
         nLayers = 1
@@ -241,12 +251,17 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         #validTable = dataTable.copy()
         #else:
         
-        dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*1.0)].copy()
+        if (transferTraining):
+            dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*1.0)].copy()
+        else:
+            dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*0.9)].copy()
         validTable = dftCorr.drop(dataTable.index)
 
         
         if (config.modelType == "gConvLSTM"):
             xt, yt, e_i, e_a = load_dataset(config,dataTable)
+            #if (ind == -1):
+            #    xt[:,:,1,:] = 1.750 + np.random.normal(0,0.05)  # set HV for constant to not affect the experimental training
             xv, yv, _, _ = load_dataset(config,validTable)
             shuffled_indicest = np.random.permutation(xt.shape[0])
             shuffled_indicest1 = np.random.permutation(xv.shape[0])
@@ -282,7 +297,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         if (config.modelType == "ConvLSTM"):
             nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(5,5), num_layers=1, bias=0, output_size=1) #16 16
         elif (config.modelType == "gConvLSTM"):
-            #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
+            #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=16, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
             nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=8, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
 
             n_nodes = input_dim[-1]
@@ -293,19 +308,35 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
 
         if (transferTraining):
             nn_model.load_state_dict(torch.load(mainPath+"function_prediction/tempModelT.pt"))
+            #nn_model.hv_mlp.apply(reset_weights)
             nn_model.train()
             # Freeze the lower layers
             for name, param in nn_model.named_parameters():
+                trainable = False
                 #if "gcn_cell_list" in name:  # Adjust the condition based on your model's naming convention
                 #if "nn_model." in name or "nn_model2." in name:  # Adjust the condition based on your model's naming convention
                 #if "nn_model." in name or "gcn_cell" in name or "scale_shift" in name:  # Adjust the condition based on your model's naming convention
-                if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name:
+                #if "input_normalizer" in name or "scale_shift" in name or "nn_model." or "linear" in name:           # cosmic things
+                if (ind == 0):
+                    #if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name or "hv_mlp" in name or "linear" in name:           # cosmic things
+                    if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name or "hv_mlp" in name:           # cosmic things
+                    #if "input_normalizer" in name or "scale_shift" in name or "hv_mlp" in name:           # cosmic things
+                    #if "input_normalizer" in name or "gcn_cell" in name or "scale_shift" in name:  # Adjust the condition based on your model's naming convention
+                        trainable = True
+                #if "input_normalizer" in name or "scale_shift" in name or "nn_model." or "gcn_cell_list.0" in name:           # cosmic things
+                
+                elif (ind == 1):
+                    #if "input_normalizer" in name or "scale_shift" in name or "linear" in name:                               #exp hv inference from cosmic
+                    if "input_normalizer" in name or "scale_shift" in name:
+                        trainable = True
+                #if "input_normalizer" in name or "scale_shift" in name or "nn_model2." in name:
+                if (trainable):
                     param.requires_grad = True
                 else:
                     param.requires_grad = False
 
-        #for name, param in nn_model.named_parameters():
-        #    print(name, param.requires_grad)
+        for name, param in nn_model.named_parameters():
+            print(name, param.requires_grad)
 
         loss = nn.MSELoss()
         #loss = CustomMSELoss()
@@ -363,14 +394,16 @@ print("start_train_python")
 
 dataManager.manageDataset("train_nn",0)
 #dataManager.manageDataset("test_nn",0)
-#dataManager.manageDatasetCosmics("train_nn",0)
-#dataManager.manageDatasetCosmics("test_nn",0)
 
 #dataManager.manageDataset("test_nn",0)
 train_NN(0,False,mainPath)
 #train_NN(0,True,mainPath)
 
-#train_NN(0,True,mainPath,"simuCosmic.parquet")
+
+dataManager.manageDatasetCosmics("train_nn",0)
+#dataManager.manageDatasetCosmics("test_nn",0)
+
+train_NN(0,True,mainPath,"simuCosmic.parquet")
 #train_NN(0,False,mainPath,"simuCosmic.parquet")
 
 #dataManager.manageDataset("test_nn",0)
@@ -380,3 +413,7 @@ train_NN(0,False,mainPath)
 #for i in range(20):
 #    train_NN(i+1,True,mainPath)
 #    predict_cicle(i+1)
+
+# back to beam time with fixed hv_mlp and nn_model
+#dataManager.manageDataset("train_nn",0)
+#train_NN(1,True,mainPath)

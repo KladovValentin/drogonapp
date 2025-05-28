@@ -153,12 +153,12 @@ def load_dataset(config, df):
         arrayToPlot2 = y[:,-1,0,0]
         xToPlot = np.arange(0,dfnX.shape[0])
 
-        plt.plot(xToPlot, arrayToPlot1, color='#0504aa', label = 'input pressure', marker='o', linestyle="None", markersize=0.8)
-        plt.plot(xToPlot, arrayToPlot2, color='#8b2522', label = 'target values', marker='o', linestyle="None", markersize=1.7)
+        #plt.plot(xToPlot, arrayToPlot1, color='#0504aa', label = 'input pressure', marker='o', linestyle="None", markersize=0.8)
+        #plt.plot(xToPlot, arrayToPlot2, color='#8b2522', label = 'target values', marker='o', linestyle="None", markersize=1.7)
 
         #plt.plot(arrayToPlot1, arrayToPlot2, color='#0504aa', label = 'target values', marker='o', linestyle="None", markersize=1.7)
 
-        plt.show()
+        #plt.show()
 
         e_ind2, e_att2 = make_graph(config)
 
@@ -271,6 +271,7 @@ class DataManager():
         meanValuesFeatures = meanValues[:cellsLength*channelsLength].reshape((channelsLength,cellsLength))
 
         meanValuesTargets = meanValues[cellsLength*channelsLength:]
+        stdValuesTargets = stdValues[cellsLength*channelsLength:]
 
         columns = list(df.columns)
 
@@ -283,7 +284,9 @@ class DataManager():
                     df[columns[featureColumns[j,i,k]]] = df[columns[featureColumns[j,i,k]]]/compute_scaling_factor(meanValuesFeatures[i][k])
 
         for i in range(cellsLength):
-            df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]])/compute_scaling_factor(meanValuesTargets[i])
+            #df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]])/compute_scaling_factor(meanValuesTargets[i])
+            #df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]]/100.0)
+            df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]]-meanValuesTargets[i])/stdValuesTargets[i]
             df[columns[targetColumns[1,i]]] = (df[columns[targetColumns[1,i]]]/compute_scaling_factor(meanValuesTargets[i+cellsLength]))     # for target errors to be around 1 for custom MSE loss
 
         return df
@@ -474,6 +477,8 @@ class DataManager():
         mean, std = 0, 0
         if (mod.startswith("train")):
             mean, std = self.meanAndStdTable(dftTrainV)
+            print(mean)
+            print(std)
             meanHV = mean[24:36]
             stdHV = std[24:36]
             #mean, std = readTrainData(pathFP,"")

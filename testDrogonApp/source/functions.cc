@@ -444,7 +444,7 @@ vector< pair<int,int> > dateRunF::loadrunlistWithEnds(int run1, int run2){
 	//fin1.open((saveLocation+"runlistzxc.dat").c_str());
     //fin1.open((saveLocation+"runlist.dat").c_str());
     //fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runList.dat");
-    fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runListCosmics106.dat");
+    fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runListCosmics56.dat");
     int run = 0; int runEnd = 0;
     while (fin1 >> run >> runEnd){
         if (run <= run1 || runEnd >= run2)

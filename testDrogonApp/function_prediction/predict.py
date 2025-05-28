@@ -27,7 +27,7 @@ def loadModel(config, input_dim, nClasses, path, e_i=0,e_a=0):
         nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1)
     elif (config.modelType == "gConvLSTM"):
         nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=8, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
-        #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1)
+        #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
     nn_model.type(torch.FloatTensor)
     nn_model.load_state_dict(torch.load(path+"tempModelT.pt"))
     nn_model.eval()
@@ -75,6 +75,7 @@ def checkDistributions():
 
 
 def getHV(model,X):
+    model.eval()
     # Example input X with features in each node (batch_size, num_nodes, feature_dim)
 
     feature_index = 1  # The specific feature in the node you want to modify
@@ -85,22 +86,24 @@ def getHV(model,X):
 
     # Optimizer setup to optimize only the specific feature at node_index and feature_index
     print(X.shape)
-    optimizer = optim.Adam([x_i], lr=0.1)
+    optimizer = optim.Adam([x_i], lr=0.01)
 
     # Loss function
     criterion = nn.MSELoss()
 
     # Number of iterations for the optimization process
-    num_iterations = 1000
+    num_iterations = 10   # ~300 for a normal operation
 
     for iteration in range(num_iterations):
         optimizer.zero_grad()  # Clear previous gradients
         
-        Y_fixed = torch.zeros(X.size(0), 24)  # Normalized target value (mean=0, std=1)
+        Y_fixed = torch.zeros(X.size(0), 12)  # Normalized target value (mean=0, std=1)
 
-        X[:, -1, feature_index, :] = x_i
+        # Create a copy of X and replace HV feature
+        X_temp = X.clone().detach()  # avoid modifying original X
+        X_temp[:, -1, feature_index, :] = x_i
         
-        Y_pred = (model(X))[:,-1,:]  # Forward pass through the model
+        Y_pred = (model(X_temp))[:,-1,:]  # Forward pass through the model   shape (batch, nodes)
 
         loss = criterion(Y_pred, Y_fixed)  # Compute the loss between predicted Y and Y_fixed
 
@@ -113,12 +116,14 @@ def getHV(model,X):
 
     # After optimization, X[:, -1, :, feature_index] should be the value that produces Y_fixed
     # Shape = (batch, nodes)
-    final_x_i = x_i.item()
-    return final_x_i, Y_pred
+    final_x_i = x_i
+    return final_x_i.clone().detach(), Y_pred
 
 
 def makePredicionList(config, experiment_path, savePath, path):
     dftCorr = pandas.read_parquet(path+ experiment_path+'.parquet')
+    #dftCorr shape is (batch, 1+features*nodes+2*nodes)
+
     #dftCorr = dataManager.normalizeDatasetNormal(dftCorr)
     dftCorr = dataManager.normalizeDatasetScale(dftCorr)
     dftCorr.reset_index(drop=True, inplace=True)
@@ -134,7 +139,7 @@ def makePredicionList(config, experiment_path, savePath, path):
     xt, yt, e_i, e_a = load_dataset(config,dftCorrExp)
     exp_dataset = My_dataset((xt,yt))
     #exp_dataset = Graph_dataset(load_dataset(config, dftCorrExp))
-    exp_dataLoader = DataLoader(exp_dataset, batch_size=256, drop_last=False)
+    exp_dataLoader = DataLoader(exp_dataset, batch_size=256*64, drop_last=False)
 
     mean, std = readTrainData(path,"")
     #mean = mean[-6:]
@@ -172,16 +177,19 @@ def makePredicionList(config, experiment_path, savePath, path):
         elif(config.modelType == "gConvLSTM"):
             #print(x)
             prediction = (nn_model(x).detach().numpy())[:,-1,:]
-            #predictedHV, predictionWithHV = getHV(nn_model,x)
+            predictedHV, predictionWithHV = getHV(nn_model,x)
             n_nodes = config.cellsLength
             for i in range(input_dim[-1]):
-                #prediction[:,i] = prediction[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
-                prediction[:,i] = prediction[:,i]*compute_scaling_factor(mean[-2*n_nodes+i])
+                prediction[:,i] = prediction[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
+                #prediction[:,i] = prediction[:,i]*compute_scaling_factor(mean[-2*n_nodes+i])
+                #prediction[:,i] = prediction[:,i]*100.0
                 #prediction[:,i] = prediction[:,i]*std[-24*2+i] + mean[-24*2+i]
+                predictionWithHV[:,i] = predictionWithHV[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
+                predictedHV[:,i] = predictedHV[:,i]*compute_scaling_factor(mean[1*n_nodes+i])
             #print(prediction)
         dat_list.append(pandas.DataFrame(prediction))
-        #hv_list.append(pandas.DataFrame(predictedHV))
-        #stable_dat_list.append(pandas.DataFrame(predictionWithHV))
+        hv_list.append(pandas.DataFrame(predictedHV))
+        stable_dat_list.append(pandas.DataFrame(predictionWithHV))
 
     fullPredictionList = pandas.concat(list(dat_list),ignore_index=True)
     pq.write_table(pa.Table.from_pandas(fullPredictionList), path + "predicted/" + savePath + '.parquet')
@@ -192,15 +200,132 @@ def makePredicionList(config, experiment_path, savePath, path):
     np.savetxt(path + "predicted/" + savePath+'.txt', fullPreductionListWithRun.values)
 
 
-    #fullHVList = pandas.concat(list(hv_list),ignore_index=True)
-    #fullHVListWithRun = pandas.concat([runColumn,fullHVList],axis=1)
-    #np.savetxt(path + "predicted/" + savePath+'HV.txt', fullHVListWithRun.values)
+    fullHVList = pandas.concat(list(hv_list),ignore_index=True)
+    fullHVListWithRun = pandas.concat([runColumn,fullHVList],axis=1)
+    np.savetxt(path + "predicted/" + savePath+'HV.txt', fullHVListWithRun.values)
 
-    #fullPredictionHVList = pandas.concat(list(stable_dat_list),ignore_index=True)
-    #fullPredictionHVListWithRun = pandas.concat([runColumn,fullPredictionHVList],axis=1)
-    #np.savetxt(path + "predicted/" + savePath+'Stable.txt', fullPredictionHVListWithRun.values)
+    fullPredictionHVList = pandas.concat(list(stable_dat_list),ignore_index=True)
+    fullPredictionHVListWithRun = pandas.concat([runColumn,fullPredictionHVList],axis=1)
+    np.savetxt(path + "predicted/" + savePath+'Stable.txt', fullPredictionHVListWithRun.values)
+
+    inject_and_predict_hv_sweep(nn_model, config, path, experiment_path)
     
     return fullPredictionList
+
+
+
+def inject_and_predict_hv_sweep(model, config, path, experiment_path):
+    # Parameters
+    hv_values = list(range(1650, 1800, 10))  # 1700 to 1800 inclusive
+    subset_size = 30
+    hv_channel_index = 1
+    cellsLength = config.cellsLength
+
+    df = pandas.read_parquet(path+ experiment_path+'.parquet')
+
+    # Get middle 30 runs
+    n_rows = df.shape[0]
+    mid = n_rows // 2
+    df_subset = df.iloc[mid - subset_size // 2: mid + subset_size // 2].copy()
+
+    run_column = df_subset.iloc[:, 0].reset_index(drop=True)
+    
+    # Column indices for HV in the flat dataframe
+    hv_column_indices = list(range(1 + hv_channel_index * cellsLength, 1 + (hv_channel_index+1) * cellsLength))
+
+    # Load training mean/std for renormalization
+    mean, std = readTrainData(path, "")
+
+    for hv in hv_values:
+        print(f"Running prediction for HV = {hv} V")
+
+        df_hv = df_subset.copy()
+        for col in hv_column_indices:
+            df_hv.iloc[:, col] = hv
+
+        # Normalize input
+        df_hv_norm = dataManager.normalizeDatasetScale(df_hv)
+
+        # Load and shape data
+        xt, _, e_i, e_a = load_dataset(config, df_hv_norm)
+        x_tensor = torch.tensor(xt.astype(np.float32))
+        e_i_torch = torch.LongTensor(e_i).movedim(-2, -1)
+        e_a_torch = torch.Tensor(e_a)
+
+        #print(x_tensor)
+
+        # Reload model in eval mode
+        model.eval()
+        with torch.no_grad():
+            prediction = model(x_tensor).numpy()[:, -1, :]  # shape (batch, nodes)
+
+        # Un-normalize prediction
+        for i in range(12):
+            prediction[:, i] = prediction[:, i] * std[-2 * cellsLength + i] + mean[-2 * cellsLength + i]
+
+        output_with_run = np.concatenate([run_column.to_numpy().reshape(-1, 1), prediction[:, :12]], axis=1)
+
+        # Save results
+        np.savetxt(path + "predicted/" + 'predicted_'+str(hv)+'.txt',  output_with_run, fmt="%.5f")
+    plot_hv_channel_sensitivity(model, x_tensor, hv_index=hv_channel_index)
+
+
+def plot_hv_channel_sensitivity(model, x_tensor, hv_index=1):
+    x_tensor.requires_grad_(True)
+    output = model(x_tensor)
+    output.mean().backward()
+
+    grads = x_tensor.grad[:, -1, hv_index, :]  # sentence[-1], HV feature, all nodes
+    sensitivity = grads.abs().mean(dim=0).detach().numpy()
+
+    import matplotlib.pyplot as plt
+    plt.bar(range(len(sensitivity)), sensitivity)
+    plt.xlabel("Node index")
+    plt.ylabel("Gradient sensitivity to HV")
+    plt.title("Per-node HV sensitivity in final forward pass")
+    plt.show()
+
+def plot_tot_vs_hv_and_heatmap(path, base_filename="predicted_", hv_range=range(1650, 1800, 10), cellsLength=12):
+    """
+    Plots:
+    1. ToT vs HV (line plot per chamber)
+    2. Heatmap of ToT per HV and chamber
+    """
+    hv_values = list(hv_range)
+    all_predictions = []
+
+    for hv in hv_values:
+        file_path = path + "predicted/" + 'predicted_'+str(hv)+'.txt'
+        pred = np.loadtxt(file_path)  # shape: (30, cellsLength)
+        mean_tot = np.mean(pred[:,1:], axis=0)  # shape: (cellsLength,)
+        all_predictions.append(mean_tot)
+
+    all_predictions = np.array(all_predictions)  # shape: (len(hv_values), cellsLength)
+
+    # --- 1. Line plot: ToT vs HV per chamber
+    plt.figure(figsize=(10, 6))
+    for ch in range(cellsLength):
+        plt.plot(hv_values, all_predictions[:, ch], label=f'Chamber {ch}')
+    plt.xlabel("High Voltage [V]")
+    plt.ylabel("Predicted ToT [a.u.]")
+    plt.title("ToT vs HV per Chamber")
+    plt.grid(True)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='small')
+    plt.tight_layout()
+    plt.show()
+
+    # --- 2. Heatmap: HV vs Chamber
+    plt.figure(figsize=(8, 6))
+    im = plt.imshow(all_predictions.T, aspect='auto', origin='lower',
+                    extent=[min(hv_values), max(hv_values), 0, cellsLength],
+                    cmap="viridis")
+    plt.colorbar(im, label="Mean ToT")
+    plt.xlabel("High Voltage [V]")
+    plt.ylabel("Chamber Index")
+    plt.title("Heatmap of ToT per HV and Chamber")
+    plt.tight_layout()
+    plt.show()
+
 
 
 def draw_predictions_spread(outputs):
@@ -248,15 +373,18 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
     print(dftable)
     
     # Get length of spacial dimension (e.g. number of channels). Can be changed
-    chLength = int(len(dftable.columns)/3)
+    #chLength = int(len(dftable.columns))
+    chLength = 24
 
     indexes = dftable[list(dftable.columns)[0]].to_numpy()
     indexes2 = dftable2[list(dftable2.columns)[0]].to_numpy()
     nptable = dftable.to_numpy()
     nptable2 = dftable2.to_numpy()
 
-    print(nptable.shape)
-    print(nptable2.shape)
+    #print(nptable[:,1+1])
+    #print(nptable[:,1+1+2*chLength])
+    #print(nptable2[:,1+1])
+    #print(nptable2[:,1+1+2*chLength])
 
 
     mean, std = readTrainData(path,"")
@@ -270,6 +398,8 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
         plt.plot(indexes, nptable[:,i+1+2*chLength], color='#8b2522', label = 'prediction test'+str(i), marker='o', linestyle="None", markersize=1.7)
         plt.plot(indexes2, nptable2[:,i+1], color='#0504aa', label = 'target train'+str(i), marker='o', linestyle="None", markersize=0.8)
         plt.plot(indexes2, nptable2[:,i+1+2*chLength], color='#228B22', label = 'prediction train'+str(i), marker='o', linestyle="None", markersize=1.7)
+
+        plt.show()
     
 
     #with open("testPred.txt","a") as file:
@@ -350,15 +480,20 @@ path = mainPath+"function_prediction/"
 
 #print("start python predict")
 test = 0
-predict_nn("tesu",'predicted1_'+str(test), path)
-predict_nn("simu",'predicted_'+str(test), path)
+#predict_nn("tesu",'predicted1_'+str(test), path)
+#predict_nn("simu",'predicted_'+str(test), path)
 
 #analyseOutput(path+"predicted/predicted1_"+str(test),path+"tesu", path+"predicted/predicted_"+str(test),path+"simu")
+
 #analyseOutput(path+"predictedSim.parquet",path+"simu.parquet")
 
 
-#predict_nn("tesuCosmic",'predictedCosmics1_', path)
-#predict_nn("simuCosmic",'predictedCosmics_', path)
+predict_nn("tesuCosmic",'predictedCosmics1_', path)
+predict_nn("simuCosmic",'predictedCosmics_', path)
 
-#analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
+analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
+
 #analyseOutput(path+"predictedCosmics.parquet",path+"simu.parquet")
+
+
+plot_tot_vs_hv_and_heatmap(path=path)

@@ -347,27 +347,31 @@ class ScaleShiftLayer(nn.Module):
     def __init__(self, nodes=24):
         super().__init__()
         # Initialize so that initially the transform is identity: x -> x
-        self.a = nn.Parameter(torch.ones(nodes))
+        #self.a = nn.Parameter(torch.ones(nodes))
+        self.log_scale = nn.Parameter(torch.zeros(nodes))
         self.b = nn.Parameter(torch.ones(nodes))
 
     def forward(self, x):
         # x shape: (batch_size, sentence_length, nodes)
         # Broadcasting handles elementwise multiplication + addition
-        return x * self.a + self.b
+        scale = torch.exp(self.log_scale)
+        return x * scale + self.b
 
 class LearnedInputNormalizer(nn.Module):
     def __init__(self, in_channels, num_nodes):
         super().__init__()
         # Per-feature per-node learnable parameters
-        self.mean = nn.Parameter(torch.zeros(in_channels, num_nodes))
-        self.scale = nn.Parameter(torch.ones(in_channels, num_nodes))
+        self.mean = nn.Parameter(torch.ones(in_channels, num_nodes))
+        self.log_scale = nn.Parameter(torch.zeros(in_channels, num_nodes))
+        #self.scale = nn.Parameter(torch.ones(in_channels, num_nodes))
 
     def forward(self, x):
         """
         x: shape (batch, sentence, in_channels, num_nodes)
         returns normalized input of same shape
         """
-        return (x - self.mean) / (self.scale + 1e-6)
+        scale = torch.exp(self.log_scale)
+        return (x - self.mean) / (scale + 1e-6)
 
 
 class GCNLSTM(torch.nn.Module):
@@ -401,7 +405,8 @@ class GCNLSTM(torch.nn.Module):
         self.intermediate_size = 8
 
         self.nn_model = nn.ModuleList([nn.Sequential(
-            nn.Linear(self.hidden_size, 128, bias=True),
+            #nn.Linear(self.hidden_size, 128, bias=True),
+            nn.Linear(self.embedding_size*2, 128, bias=True),
             nn.BatchNorm1d(128),
             nn.Dropout(0.5),
             nn.LeakyReLU(inplace=True),
@@ -413,18 +418,25 @@ class GCNLSTM(torch.nn.Module):
             nn.Linear(64, self.embedding_size)
         ) for _ in range(self.nodes)])
 
+
+        self.hv_mlp = nn.Sequential(
+            nn.Linear(1, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, int(self.embedding_size*4/4))
+        )
+
         self.nn_model2 = nn.Sequential(
             #nn.Linear(self.intermediate_size, 256, bias=True),
-            nn.Linear(self.embedding_size, 64, bias=True),
-            #nn.Linear(self.hidden_size, 128, bias=True),
-            #nn.BatchNorm1d(64),
-            #nn.Dropout(0.5),
+            #nn.Linear(self.embedding_size, 64, bias=True),
+            nn.Linear(self.hidden_size, 64, bias=True),
+            nn.BatchNorm1d(64),
+            nn.Dropout(0.5),
             nn.LeakyReLU(inplace=True),
             nn.Linear(64, 128, bias=True),
-            #nn.BatchNorm1d(128),
+            nn.BatchNorm1d(128),
             nn.LeakyReLU(inplace=True),
-            nn.Linear(128, self.embedding_size),
-            #nn.BatchNorm1d(self.intermediate_size)
+            nn.Linear(128, int(self.embedding_size*4/4)),
+            nn.BatchNorm1d(int(self.embedding_size*4/4))
         )
 
     def forward(self, input, hx = None):
@@ -434,12 +446,17 @@ class GCNLSTM(torch.nn.Module):
         #   out: (batch, sentence, nodes)
         #   emb: (batch, sentence, nodes, features(emb))
 
-        input = self.input_normalizer(input)
 
         batch_size = input.size(0)
         sentence_length = input.size(1)
         inputDeep = input.movedim(2,3)
 
+        hv_input = inputDeep[:,:,:,1]  #select only HV
+
+        input = self.input_normalizer(input)
+
+        inputDeep = input.movedim(2,3)
+        inputDeep[:, :, :, 1] = 0
         
         if hx == None:
             if torch.cuda.is_available():
@@ -495,17 +512,33 @@ class GCNLSTM(torch.nn.Module):
         
 
         # Big FC with the same coefficients for all nodes to get general dependencies
-#       inputDeep = inpdp.reshape((batch_size*sentence_length*self.nodes, self.hidden_size))
+        #inputDeep = inpdp.reshape((batch_size*sentence_length*self.nodes, self.hidden_size))
         #inputDeep = inputDeep.reshape((batch_size*sentence_length*self.nodes, self.input_size))
-        #inputDeep = (self.nn_model2(inputDeep)).reshape((batch_size, sentence_length, self.nodes, self.intermediate_size))
+        inputDeep = (self.nn_model2(inputDeep.reshape((batch_size*sentence_length*self.nodes, self.hidden_size)))).reshape((batch_size, sentence_length, self.nodes, int(self.embedding_size*4/4)))
+
+        #hv_features = [
+        #    self.hv_mlp[i](hv_input[:, :, i].unsqueeze(-1).reshape(-1, 1))
+        #    for i in range(self.nodes)
+        #]
+        #hv_features = torch.stack(hv_features, dim=1).reshape((batch_size, sentence_length, self.nodes, int(self.embedding_size*4/4)))  # shape: (batch,sentence, nodes, embedding/4)
+        #print(hv_input)
+        
+        #print(hv_input)
+        hv_features = self.hv_mlp(hv_input.reshape((batch_size * sentence_length * self.nodes, 1)))
+        hv_features = hv_features.reshape((batch_size, sentence_length, self.nodes, int(self.embedding_size*4/4)))  # shape: (batch,sentence, nodes, embedding/4)
+        
+        #print(hv_features)
+        #print(torch.norm(hv_features))
+        #print(torch.norm(inputDeep))
+        inputDeep = torch.cat([inputDeep, hv_features], dim=-1)
 
         # Small FCs for each node to account for the differences in nodes
         #embedded1 = torch.split(inputDeep, 1, dim=2)
-        embedded1 = [inputDeep[:,:,i,:] for i in range(self.nodes)]
+        #embedded1 = [inputDeep[:,:,i,:] for i in range(self.nodes)]
         #embedded = nn.Parameter(torch.zeros(batch_size, sentence_length, self.nodes, self.embedding_size))
         output_list = []
         for i in range(self.nodes):
-            embedded11 = self.nn_model[i](embedded1[i].reshape((batch_size*sentence_length, self.hidden_size)))
+            embedded11 = self.nn_model[i](inputDeep[:,:,i,:].reshape((batch_size*sentence_length, self.embedding_size*2)))
             embedded11 = embedded11.reshape((batch_size, sentence_length, 1, self.embedding_size))
 
             output_list.append(embedded11)
@@ -515,11 +548,11 @@ class GCNLSTM(torch.nn.Module):
         embedded = torch.cat(output_list, dim=2)
         #shape: batch, sentence, nodes, embedding
 
-        intermediate = embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))
-        embedded = (self.nn_model2(intermediate)).reshape((batch_size, sentence_length, self.nodes, self.embedding_size))
+        #intermediate = embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))
+        #embedded = (self.nn_model2(intermediate)).reshape((batch_size, sentence_length, self.nodes, self.embedding_size))
 
-        #result_tensor = self.linear(embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))).reshape((batch_size, sentence_length, self.nodes))
-        result_tensor = self.scale_shift(self.linear(embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))).reshape((batch_size, sentence_length, self.nodes)))
+        result_tensor = self.linear(embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))).reshape((batch_size, sentence_length, self.nodes))
+        result_tensor = self.scale_shift(result_tensor)
 
 
 
