@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang = "en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width">
+
+    <title>smart control system</title>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300|Bitter|Ubuntu+Mono' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="style.css">
+    <style>
+      
+    </style>
+
+    <!-- Load plotly.js into the DOM -->
+	  <script src='https://cdn.plot.ly/plotly-2.24.1.min.js'></script>
+  </head>
+
+  <body>
+
+    <div id='plotlyChart'><!-- Plotly chart will be drawn inside this DIV --></div>
+
+    <div class="sidePannel" id = "sidePannel">
+      <div class = "button" id = "button1">Button1</div>
+      <div class = "button" id = "button2">Button2</div>
+      <div class = "button" id = "button3">Button3</div>
+      <div class = "button" id = "settingsButton">settings</div>
+      <div class = "button" id = "thttpserverButton">QA control</div>
+    </div>
+    <script src="sidePannel.js"></script>
+
+    <div class="mainDisplay" id="mainDisplay">
+      <div class="settingsPage" id="settingsPage">settings</div>
+      <iframe class="thttpserver" id="thttpserver" src="http://localhost:8100/"></iframe>
+    </div>
+    <script src="mainDisplay.js"></script>
+
+    <script src="handleButtons.js"></script>
+  </body>
+
+  <script type='module'>
+    import { openFile, draw } from 'https://root.cern/js/latest/modules/main.mjs';
+    let file = await openFile('https://root.cern/js/files/hsimple.root');
+    let obj = await file.readObject('hpxpy;1');
+    //draw('drawing', obj, 'colz');
+  </script>
+
+</html>

@@ -1,0 +1,1169 @@
+import torch.nn as nn
+import torch
+#import torch_geometric
+from torch_geometric.nn import ChebConv, GCNConv, GCN
+from torch_geometric.nn.inits import glorot, zeros
+#import torch.nn.functional as F
+#from torch_geometric_temporal.nn.recurrent import GConvLSTM
+from torch.autograd import Function
+from torch.autograd import Variable
+import numpy as np
+from torch.jit import ignore
+
+
+
+class GraphConvolution(nn.Module):
+    def __init__(self, in_features, out_features):
+        super(GraphConvolution, self).__init__()
+        self.weight = nn.Parameter(torch.randn(in_features, out_features))
+        self.bias = nn.Parameter(torch.zeros(out_features))
+
+    def forward(self, x, adj):
+        """
+        x: input features (N x in_features), N is the number of nodes
+        adj: adjacency matrix (N x N), sparse or dense
+        """
+        support = torch.matmul(x, self.weight)  # XW
+        output = torch.matmul(adj, support) + self.bias  # AXW + b
+        return output
+    
+class GraphConvolutionNLayer(nn.Module):
+    def __init__(self, in_channels, hidden_channels, num_layers, out_channels):
+        super(GraphConvolutionNLayer, self).__init__()
+        self.num_layers = num_layers
+        self.in_channels = in_channels
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+
+        self.sizes = [self.in_channels]
+        for i in range(self.num_layers-1):
+            self.sizes.append(self.hidden_channels)
+        if (self.num_layers > 1):
+            self.sizes.append(self.out_channels)
+
+        self.gcn_cell_list = nn.ModuleList([GraphConvolution(self.sizes[i],self.sizes[i+1]) for i in range(self.num_layers)])
+
+    def forward(self, x, edge_index, edge_weight):
+        """
+        x: input features (N x in_features), N is the number of nodes
+        adj: adjacency matrix (N x N), sparse or dense
+        """
+        adjacency_matrix = Variable(torch.zeros(x.size(1), x.size(1)))
+        #print(edge_index)
+        #print(edge_index[0])
+        adjacency_matrix[edge_index[0], edge_index[1]] = 1
+        #hidden = list()
+        #hidden.append(x)
+        for layer in range(self.num_layers):
+            x = self.gcn_cell_list[layer](x,adjacency_matrix)
+            #hidden.append()
+        return x
+
+
+
+
+class GConvLSTMCellspatial(nn.Module):
+    def __init__(self, input_size, hidden_size, kernel_size, bias=True, normalization = "sym"):
+        super(GConvLSTMCellspatial, self).__init__()
+
+        self.in_channels = input_size[0]
+        self.n_nodes = input_size[1]
+        self.hidden_channels = hidden_size
+        self.K = kernel_size
+        self.normalization = normalization
+
+        self.gamma = nn.Parameter(torch.ones(self.hidden_channels))
+
+        self.bias = bias
+
+        self._create_parameters_and_layers()
+        self._set_parameters()
+
+    def _create_input_gate_parameters_and_layers(self):
+
+        self.conv_x_i = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+        self.conv_h_i = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+
+        self.w_c_i = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_i = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_forget_gate_parameters_and_layers(self):
+
+        self.conv_x_f = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+        self.conv_h_f = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+
+        self.w_c_f = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_f = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_cell_state_parameters_and_layers(self):
+
+        self.conv_x_c = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+        self.conv_h_c = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+
+        self.b_c = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_output_gate_parameters_and_layers(self):
+
+        self.conv_x_o = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+        self.conv_h_o = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels, bias=self.bias)
+
+        self.w_c_o = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_o = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_parameters_and_layers(self):
+        self._create_input_gate_parameters_and_layers()
+        self._create_forget_gate_parameters_and_layers()
+        self._create_cell_state_parameters_and_layers()
+        self._create_output_gate_parameters_and_layers()
+
+    def _set_parameters(self):
+        #glorot(self.w_c_i)
+        #glorot(self.w_c_f)
+        #glorot(self.w_c_o)
+        #zeros(self.b_i)
+        #zeros(self.b_f)
+        #zeros(self.b_c)
+        #zeros(self.b_o)
+        nn.init.xavier_uniform_(self.w_c_i)
+        nn.init.xavier_uniform_(self.w_c_f)
+        nn.init.xavier_uniform_(self.w_c_o)
+        nn.init.zeros_(self.b_i)
+        nn.init.zeros_(self.b_f)
+        nn.init.zeros_(self.b_c)
+        nn.init.zeros_(self.b_o)
+
+    def _calculate_input_gate(self, X, edge_index, edge_weight, H, C):
+        I = self.conv_x_i(X, edge_index, edge_weight)
+        I = I + self.conv_h_i(H, edge_index, edge_weight)
+        I = I + (self.w_c_i * C)
+        I = I + self.b_i
+        I = torch.sigmoid(I)
+        return I
+
+    def _calculate_forget_gate(self, X, edge_index, edge_weight, H, C):
+        F = self.conv_x_f(X, edge_index, edge_weight)
+        F = F + self.conv_h_f(H, edge_index, edge_weight)
+        F = F + (self.w_c_f * C)
+        F = F + self.b_f
+        F = torch.sigmoid(F)
+        return F
+
+    def _calculate_cell_state(self, X, edge_index, edge_weight, H, C, I, F):
+        T = self.conv_x_c(X, edge_index, edge_weight)
+        T = T + self.conv_h_c(H, edge_index, edge_weight)
+        T = T + self.b_c 
+        T = torch.tanh(T)
+        C = F * C + I * T
+        return C
+
+    def _calculate_output_gate(self, X, edge_index, edge_weight, H, C):
+        O = self.conv_x_o(X, edge_index, edge_weight)
+        O = O + self.conv_h_o(H, edge_index, edge_weight)
+        O = O + (self.w_c_o * C)
+        O = O + self.b_o    
+        O = torch.sigmoid(O)
+        return O
+
+    def _calculate_hidden_state(self, O, C):
+        H = O * torch.tanh(C)
+        return H
+        
+
+    def forward(self, input, edge_index, edge_weight,  delta_t=None, hx=None):
+
+        # Inputs:
+        #       input: of shape (batch_size, nodes, input_size)
+        #       hx: of shape (2, batch_size, nodes, hidden_size)
+        # Outputs:
+        #       hy: of shape (batch_size, nodes, hidden_size)
+        #       cy: of shape (batch_size, nodes, hidden_size)
+
+        if hx == None:
+            hx = Variable(input.new_zeros(input.size(0), self.n_nodes, self.hidden_channels))
+            hx = (hx, hx)
+        hx, cx = hx
+
+        decay = torch.exp(-nn.functional.relu(self.gamma) * delta_t.unsqueeze(-1))  # shape (B, N, 1)
+        cx = cx * decay  # dampen memory if time gap is large
+        hx = hx * decay  # dampen memory if time gap is large
+
+        I = self._calculate_input_gate(input, edge_index, edge_weight, hx, cx)
+        F = self._calculate_forget_gate(input, edge_index, edge_weight, hx, cx)
+        C = self._calculate_cell_state(input, edge_index, edge_weight, hx, cx, I, F)
+        O = self._calculate_output_gate(input, edge_index, edge_weight, hx, cx)
+        H = self._calculate_hidden_state(O, C)
+
+        return (H,C)
+
+
+@torch.no_grad()
+def _replicate_edges(edge_index, edge_weight, B, N):
+    """
+    Create a block-diagonal set of edges for B copies of the same N-node graph.
+    edge_index: (2, E) long
+    edge_weight: (E,) or None (float)
+    returns: edge_index_b (2, B*E), edge_weight_b (B*E or None)
+    """
+    device = edge_index.device
+    E = edge_index.size(1)
+
+    # (B, 2, E)
+    ei = edge_index.unsqueeze(0).repeat(B, 1, 1)
+    # add offsets [0, N, 2N, ...] to both rows (src and dst)
+    offsets = (torch.arange(B, device=device).view(B, 1, 1) * N)
+    ei = ei + offsets
+    # -> (2, B*E)
+    ei = ei.transpose(0, 1).reshape(2, B * E).contiguous()
+
+    if edge_weight is None:
+        ew = None
+    else:
+        ew = edge_weight.repeat(B).contiguous()
+
+    return ei, ew
+
+
+def cheb_conv_batched(conv, X, edge_index, edge_weight, lambda_max):
+    """
+    X:          (B, N, F_in)
+    edge_index: (2, E) long  (single-graph topology)
+    edge_weight:(E,) float or None
+    lambda_max: scalar or tensor of shape (B,)
+    returns:    (B, N, F_out)
+    """
+    B, N, F = X.shape
+    x_flat = X.reshape(B * N, F).contiguous()
+
+    ei_b, ew_b = _replicate_edges(edge_index, edge_weight, B, N)
+
+    # ChebConv accepts a scalar or a per-graph tensor for lambda_max.
+    # Make it length-B tensor to be explicit:
+    #if not torch.is_tensor(lambda_max):
+    #    lambda_max = torch.tensor([lambda_max] * B, device=X.device, dtype=X.dtype)
+    #elif lambda_max.dim() == 0:
+    #    lambda_max = lambda_max.expand(B)
+
+    out_flat = conv(x_flat, ei_b, ew_b, lambda_max=lambda_max)
+    return out_flat.view(B, N, -1)
+
+
+
+
+class GConvLSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size, kernel_size, bias=True, normalization = "sym"):
+        super(GConvLSTMCell, self).__init__()
+
+        self.in_channels = input_size[0]
+        self.n_nodes = input_size[1]
+        self.hidden_channels = hidden_size
+        self.K = kernel_size
+        self.normalization = normalization
+
+        self.gamma = nn.Parameter(torch.ones(self.hidden_channels))
+
+        self.bias = bias
+
+        #self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, input_size[1], input_size[2])))
+        #self.reset_parameters()
+        self._create_parameters_and_layers()
+        self._set_parameters()
+
+    def _create_input_gate_parameters_and_layers(self):
+
+        self.conv_x_i = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_x_i = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        self.conv_h_i = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_h_i = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        #self.conv_x_i = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        #self.conv_h_i = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        self.w_c_i = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_i = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_forget_gate_parameters_and_layers(self):
+
+        self.conv_x_f = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_x_f = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        self.conv_h_f = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_h_f = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        #self.conv_x_f = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        #self.conv_h_f = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        self.w_c_f = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_f = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_cell_state_parameters_and_layers(self):
+
+        self.conv_x_c = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_x_c = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        self.conv_h_c = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_h_c = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        #self.conv_x_c = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        #self.conv_h_c = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        self.b_c = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_output_gate_parameters_and_layers(self):
+
+        self.conv_x_o = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_x_o = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        self.conv_h_o = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
+        #self.conv_h_o = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        #self.conv_x_o = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+        #self.conv_h_o = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
+
+        self.w_c_o = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+        self.b_o = nn.Parameter(torch.Tensor(1, self.hidden_channels))
+
+    def _create_parameters_and_layers(self):
+        self._create_input_gate_parameters_and_layers()
+        self._create_forget_gate_parameters_and_layers()
+        self._create_cell_state_parameters_and_layers()
+        self._create_output_gate_parameters_and_layers()
+
+    def _set_parameters(self):
+        #glorot(self.w_c_i)
+        #glorot(self.w_c_f)
+        #glorot(self.w_c_o)
+        #zeros(self.b_i)
+        #zeros(self.b_f)
+        #zeros(self.b_c)
+        #zeros(self.b_o)
+        nn.init.xavier_uniform_(self.w_c_i)
+        nn.init.xavier_uniform_(self.w_c_f)
+        nn.init.xavier_uniform_(self.w_c_o)
+        nn.init.zeros_(self.b_i)
+        nn.init.zeros_(self.b_f)
+        nn.init.zeros_(self.b_c)
+        nn.init.zeros_(self.b_o)
+
+    def _calculate_input_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        I = self.conv_x_i(X, edge_index, edge_weight, lambda_max=lambda_max,batch=X.shape[0])
+        I = I + self.conv_h_i(H, edge_index, edge_weight, lambda_max=lambda_max,batch=H.shape[0])
+        #I = cheb_conv_batched(self.conv_x_i, X, edge_index, edge_weight, lambda_max=lambda_max)
+        #I = I + cheb_conv_batched(self.conv_h_i, H, edge_index, edge_weight, lambda_max=lambda_max)
+        #I = self.conv_x_i(X, edge_index, edge_weight)
+        #I = I + self.conv_h_i(H, edge_index, edge_weight)
+        I = I + (self.w_c_i * C)
+        I = I + self.b_i
+        I = torch.sigmoid(I)
+        return I
+
+    def _calculate_forget_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        F = self.conv_x_f(X, edge_index, edge_weight, lambda_max=lambda_max,batch=X.shape[0])
+        F = F + self.conv_h_f(H, edge_index, edge_weight, lambda_max=lambda_max,batch=H.shape[0])
+        #F = cheb_conv_batched(self.conv_x_f, X, edge_index, edge_weight, lambda_max=lambda_max)
+        #F = F + cheb_conv_batched(self.conv_h_f, H, edge_index, edge_weight, lambda_max=lambda_max)
+        #F = self.conv_x_f(X, edge_index, edge_weight)
+        #F = F + self.conv_h_f(H, edge_index, edge_weight)
+        F = F + (self.w_c_f * C)
+        F = F + self.b_f
+        F = torch.sigmoid(F)
+        return F
+
+    def _calculate_cell_state(self, X, edge_index, edge_weight, H, C, I, F, lambda_max):
+        T = self.conv_x_c(X, edge_index, edge_weight, lambda_max=lambda_max,batch=X.shape[0])
+        T = T + self.conv_h_c(H, edge_index, edge_weight, lambda_max=lambda_max,batch=H.shape[0])
+        #T = cheb_conv_batched(self.conv_x_c, X, edge_index, edge_weight, lambda_max=lambda_max)
+        #T = T + cheb_conv_batched(self.conv_h_c, H, edge_index, edge_weight, lambda_max=lambda_max)
+        #T = self.conv_x_c(X, edge_index, edge_weight)
+        #T = T + self.conv_h_c(H, edge_index, edge_weight)
+        T = T + self.b_c 
+        T = torch.tanh(T)
+        C = F * C + I * T
+        return C
+
+    def _calculate_output_gate(self, X, edge_index, edge_weight, H, C, lambda_max):
+        O = self.conv_x_o(X, edge_index, edge_weight, lambda_max=lambda_max, batch=X.shape[0])
+        O = O + self.conv_h_o(H, edge_index, edge_weight, lambda_max=lambda_max, batch=H.shape[0])
+        #O = cheb_conv_batched(self.conv_x_o, X, edge_index, edge_weight, lambda_max=lambda_max)
+        #O = O + cheb_conv_batched(self.conv_h_o, H, edge_index, edge_weight, lambda_max=lambda_max)
+        #O = self.conv_x_o(X, edge_index, edge_weight)
+        #O = O + self.conv_h_o(H, edge_index, edge_weight)
+        O = O + (self.w_c_o * C)
+        O = O + self.b_o    
+        O = torch.sigmoid(O)
+        return O
+
+    def _calculate_hidden_state(self, O, C):
+        H = O * torch.tanh(C)
+        return H
+        
+
+    def forward(self, input, edge_index, edge_weight, delta_t=None, hx=None, lambda_max=None):
+
+        # Inputs:
+        #       input: of shape (batch_size, nodes, input_size)
+        #       hx: of shape (2, batch_size, nodes, hidden_size)
+        # Outputs:
+        #       hy: of shape (batch_size, nodes, hidden_size)
+        #       cy: of shape (batch_size, nodes, hidden_size)
+
+        if hx == None:
+            hx = Variable(input.new_zeros(input.size(0), self.n_nodes, self.hidden_channels))
+            hx = (hx, hx)
+        hx, cx = hx
+
+        decay = torch.exp(-nn.functional.relu(self.gamma) * delta_t.unsqueeze(-1))  # shape (B, N, 1)
+        cx = cx * decay  # dampen memory if time gap is large
+        hx = hx * decay  # dampen memory if time gap is large
+
+        #H = self._set_hidden_state(input, H)
+        #C = self._set_cell_state(input, C)
+        I = self._calculate_input_gate(input, edge_index, edge_weight, hx, cx, lambda_max)
+        F = self._calculate_forget_gate(input, edge_index, edge_weight, hx, cx, lambda_max)
+        C = self._calculate_cell_state(input, edge_index, edge_weight, hx, cx, I, F, lambda_max)
+        O = self._calculate_output_gate(input, edge_index, edge_weight, hx, cx, lambda_max)
+        H = self._calculate_hidden_state(O, C)
+
+        return (H,C)
+
+
+class FiLM(nn.Module):
+    def __init__(self, cond_dim, feature_dim, nodes=24):
+        super().__init__()
+        self.gamma = nn.Sequential(
+            nn.Linear(cond_dim, 16),
+            nn.ReLU(),
+            nn.Linear(16, feature_dim)
+        )
+        self.beta = nn.Sequential(
+            nn.Linear(cond_dim, 16),
+            nn.ReLU(),
+            nn.Linear(16, feature_dim)
+        )
+
+        self.scale = nn.Parameter(torch.ones(nodes))
+        self.mean = nn.Parameter(torch.ones(nodes))
+        self.averageHV = nn.Parameter(torch.ones(nodes)*1.75)
+
+
+    def forward(self, cond, x):
+        """
+        cond: shape (batch * sentence, 1)
+        x: shape (batch, sentence, nodes, feature_dim)
+        """
+        #B, S, N, F = x.shape
+        #cond = cond.reshape(B * S * N, 1)
+        #gamma = self.gamma(cond).view(B, S, N, F)
+        #beta = self.beta(cond).view(B, S, N, F)
+
+        #return gamma * x + beta
+        #print( 1 + (cond-self.averageHV)*self.scale )
+        return x*( 1 + (cond-self.averageHV)*self.scale )
+
+
+
+class ScaleShiftLayer(nn.Module):
+    def __init__(self, nodes=24):
+        super().__init__()
+        # Initialize so that initially the transform is identity: x -> x
+        #self.a = nn.Parameter(torch.ones(nodes))
+        self.log_scale = nn.Parameter(torch.zeros(nodes))
+        self.b = nn.Parameter(torch.ones(nodes))
+
+    def forward(self, x):
+        # x shape: (batch_size, sentence_length, nodes)
+        # Broadcasting handles elementwise multiplication + addition
+        scale = torch.exp(self.log_scale)
+        return x * scale + self.b
+
+class LearnedInputNormalizer(nn.Module):
+    def __init__(self, in_channels, num_nodes):
+        super().__init__()
+        # Per-feature per-node learnable parameters
+        self.mean = nn.Parameter(torch.ones(in_channels, num_nodes))
+        self.log_scale = nn.Parameter(torch.zeros(in_channels, num_nodes))
+        #self.scale = nn.Parameter(torch.ones(in_channels, num_nodes))
+
+    def forward(self, x):
+        """
+        x: shape (batch, sentence, in_channels, num_nodes)
+        returns normalized input of same shape
+        """
+        scale = torch.exp(self.log_scale)
+        #return x
+        return (x - self.mean) / (scale)
+
+
+class GCNLSTM(torch.nn.Module):
+    def __init__(self, input_dims, embedding_size, hidden_size, kernel_size, num_layers, e_i, e_a):
+        super().__init__()
+
+        self.e_a = nn.Parameter(torch.sigmoid(e_a.clone()), requires_grad=True)
+        #self.e_a = e_a
+        self.e_i = e_i
+
+        self.input_size = input_dims[0]-1  #minus 1 to exclude dT
+        self.nodes = input_dims[1]
+        self.embedding_size = embedding_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.kernel_size = kernel_size
+        
+        self.rnn = nn.LSTM(self.embedding_size, self.hidden_size, num_layers, batch_first=True, bidirectional=False)
+
+        #self.gcn_cell_list = nn.ModuleList([GConvLSTMCell((self.input_size,self.nodes),
+        #                                    self.hidden_size,
+        #                                    self.kernel_size) for _ in range(self.num_layers)])
+        self.gcn_cell_list = nn.ModuleList([GConvLSTMCellspatial((self.input_size,self.nodes),
+                                            self.hidden_size,
+                                            self.kernel_size) for _ in range(self.num_layers)])
+        self.gnn = GCN(in_channels=self.input_size, hidden_channels=self.hidden_size, num_layers=kernel_size, out_channels=self.hidden_size, bias=True)
+
+        #self.linear = torch.nn.Linear(hidden_size, 1)
+        self.linear = torch.nn.Linear(embedding_size, 1)
+
+        self.scale_shift = ScaleShiftLayer(self.nodes)
+        self.input_normalizer = LearnedInputNormalizer(in_channels=self.input_size, num_nodes=self.nodes)
+
+        self.intermediate_size = 8
+
+        self.nn_model = nn.ModuleList([nn.Sequential(
+            #nn.Linear(self.hidden_size, 128, bias=True),
+            nn.Linear(self.embedding_size*2, 64, bias=True),
+            nn.BatchNorm1d(64),
+            nn.Dropout(0.5),
+            nn.LeakyReLU(inplace=True),
+
+            #nn.Linear(128, 64, bias=True),
+            #nn.BatchNorm1d(64),
+            #nn.LeakyReLU(inplace=True),
+
+            nn.Linear(64, self.embedding_size)
+        ) for _ in range(self.nodes)])
+
+
+        #self.film = FiLM(cond_dim=1, feature_dim=self.embedding_size)
+        self.film = FiLM(cond_dim=1, feature_dim=1, nodes=self.nodes)
+
+
+        self.hv_mlp = nn.Sequential(
+            nn.Linear(1, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, int(self.embedding_size*4/4))
+        )
+
+        self.input_proj = nn.Linear(self.input_size, self.hidden_size)
+
+        self.nn_model2 = nn.ModuleList([nn.Sequential(
+        #self.nn_model2 = nn.Sequential(
+            #nn.Linear(self.intermediate_size, 256, bias=True),
+            #nn.Linear(self.embedding_size, 64, bias=True),
+            nn.Linear(self.hidden_size, 64, bias=True),
+            nn.BatchNorm1d(64),
+            #nn.Dropout(0.5),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(64, 128, bias=True),
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(128, int(self.embedding_size*4/4))
+            #nn.BatchNorm1d(int(self.embedding_size*4/4))
+        ) for _ in range(self.nodes)])
+
+    def forward(self, input, hx = None):
+        # Shapes:
+        #   input:(batch, sentence, features, nodes)
+        #   inDeep:(batch, sentence, nodes, features(inp))
+        #   out: (batch, sentence, nodes)
+        #   emb: (batch, sentence, nodes, features(emb))
+
+        #inputCopy = input.clone()
+        #input = inputCopy[:,-1:,:,:]
+
+        batch_size = input.size(0)
+        sentence_length = input.size(1)
+
+        hv_input = input[:,:,1,:]  #select only HV
+        dT_input = input[:,:,-1,:]  #select only dT
+
+        inputCopy = input.clone()
+        input = inputCopy[:,:,:-1,:]    #remove dT
+
+        input = self.input_normalizer(input)
+
+        inputDeepClone = input.movedim(2,3)
+        inputDeep = inputDeepClone.clone() 
+        inputDeep[:, :, :, 1] = 0    #set HV to zero to not use it
+
+
+        #print(inputDeep[120,-1,:,:])
+
+        #inputDeep = self.film(hv_input, inputDeep)
+        
+        if hx == None:
+            if torch.cuda.is_available():
+                h0 = Variable(torch.zeros(self.num_layers, batch_size, self.nodes, self.hidden_size).cuda())
+            else:
+                h0 = Variable(torch.zeros(self.num_layers, batch_size, self.nodes, self.hidden_size))
+        else:
+            h0 = hx
+        hidden = list()
+        for layer in range(self.num_layers):
+            hidden.append((h0[layer], h0[layer]))
+        output_list1 = []
+
+        
+        for t in range(sentence_length):
+            #hidden_l = self.gnn(inputDeep[:, t, :, :],self.e_i, self.e_a)
+
+            
+            for layer in range(self.num_layers):
+                if layer == 0:
+                    hidden_l = self.gcn_cell_list[layer](
+                        inputDeep[:, t, :, :],
+                        self.e_i, self.e_a, dT_input[:, t, :],
+                        #self.e_i, self.e_a,
+                        (hidden[layer][0],hidden[layer][1])
+                        )
+                else:
+                    hidden_l = self.gcn_cell_list[layer](
+                        hidden[layer - 1][0],
+                        self.e_i, self.e_a,
+                        (hidden[layer][0], hidden[layer][1])
+                        )
+                hidden[layer] = hidden_l
+
+            #output_list1.append(hidden_l[0].unsqueeze(1))
+            output_list1.append(self.input_proj(inputDeep[:, t, :, :]).unsqueeze(1))
+            #output_list1.append(hidden_l.unsqueeze(1))
+
+        inputDeep = torch.cat(output_list1, dim=1)
+        #print(inputDeep.shape)
+        
+
+
+        """
+        #No GCN: just lstm for each node separately
+        lstm_results = torch.empty_like(inputDeep)
+        for i in range(self.nodes):
+            if torch.cuda.is_available():
+                hiddentt = (torch.zeros(self.num_layers, batch_size, self.hidden_size).cuda())
+                cellsttt = (torch.zeros(self.num_layers, batch_size, self.hidden_size).cuda())
+            else:
+                hiddentt = (torch.zeros(self.num_layers, batch_size, self.hidden_size))
+                cellsttt = (torch.zeros(self.num_layers, batch_size, self.hidden_size))
+            lstm_input = inputDeep[:, :, i, :]
+            lstm_results[:,:,i,:], (hiddentt,cellsttt) = self.rnn(lstm_input, (hiddentt,cellsttt))
+        """
+        
+
+        # Big FC with the same coefficients for all nodes to get general dependencies
+        #inputDeep = inpdp.reshape((batch_size*sentence_length*self.nodes, self.hidden_size))
+        #inputDeep = inputDeep.reshape((batch_size*sentence_length*self.nodes, self.input_size))
+        #inputDeep = self.film(hv_input, inputDeep)
+
+        #inputDeep = self.input_proj(inputDeep)    # this is for just FCN case
+
+        #inputDeep = (self.nn_model2(inputDeep.reshape((batch_size*sentence_length*self.nodes, self.hidden_size)))).reshape((batch_size, sentence_length, self.nodes, int(self.embedding_size*4/4)))
+
+        #hv_features = [
+        #    self.hv_mlp[i](hv_input[:, :, i].unsqueeze(-1).reshape(-1, 1))
+        #    for i in range(self.nodes)
+        #]
+        #hv_features = torch.stack(hv_features, dim=1).reshape((batch_size, sentence_length, self.nodes, int(self.embedding_size*4/4)))  # shape: (batch,sentence, nodes, embedding/4)
+        #print(hv_input)
+        
+        #print(hv_input)
+        #hv_features = self.hv_mlp(hv_input.reshape((batch_size * sentence_length * self.nodes, 1)))
+        #hv_features = hv_features.reshape((batch_size, sentence_length, self.nodes, int(self.embedding_size*4/4)))  # shape: (batch,sentence, nodes, embedding/4)
+
+        #hv_features = self.hv_mlp(hv_input.unsqueeze(-1))
+        
+        #print(hv_features.shape)
+        #print(torch.norm(hv_features))
+        #print(torch.norm(inputDeep))
+        #inputDeep = torch.cat([inputDeep, hv_features], dim=-1)
+
+        #inputDeep = self.film(hv_input, inputDeep)
+
+        # Small FCs for each node to account for the differences in nodes
+        #embedded1 = torch.split(inputDeep, 1, dim=2)
+        #embedded1 = [inputDeep[:,:,i,:] for i in range(self.nodes)]
+        #embedded = nn.Parameter(torch.zeros(batch_size, sentence_length, self.nodes, self.embedding_size))
+        output_list = []
+        for i in range(self.nodes):
+
+            inputDeepX = (self.nn_model2[i](inputDeep[:,:,i,:].reshape((batch_size*sentence_length, self.hidden_size)))).reshape((batch_size, sentence_length, int(self.embedding_size*4/4)))
+            hv_features = self.hv_mlp(hv_input[:,:,i].reshape((batch_size * sentence_length, 1)))
+            hv_features = hv_features.reshape((batch_size, sentence_length, int(self.embedding_size*4/4)))  # shape: (batch,sentence, nodes, embedding/4)
+            inputDeepX = torch.cat([inputDeepX, hv_features], dim=-1)
+
+            embedded11 = self.nn_model[i](inputDeepX.reshape((batch_size*sentence_length, self.embedding_size*2)))
+            #embedded11 = self.nn_model[i](inputDeep[:,:,i,:].reshape((batch_size*sentence_length, self.embedding_size*2)))
+            embedded11 = embedded11.reshape((batch_size, sentence_length, 1, self.embedding_size))
+
+            output_list.append(embedded11)
+            #embedded[:,:,i,:] = embedded1[i]
+            #else:
+            #    embedded = torch.cat((embedded, embedded1[i]), dim=2)
+        embedded = torch.cat(output_list, dim=2)
+        #shape: batch, sentence, nodes, embedding
+
+        #intermediate = embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))
+        #embedded = (self.nn_model2(intermediate)).reshape((batch_size, sentence_length, self.nodes, self.embedding_size))
+
+
+        result_tensor = self.linear(embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))).reshape((batch_size, sentence_length, self.nodes))
+        #result_tensor = self.film(hv_input.squeeze(-1), result_tensor)  # shape: (batch, sentence, nodes)
+        result_tensor = self.scale_shift(result_tensor)
+
+
+
+        #result_tensor = Variable(torch.zeros(batch_size, sentence_length, self.nodes))
+
+
+        #No GCN: just convolution for each word in a sentence (reshape nodes->4v6 just in this particular case)
+        """
+        #embeddedt = embedded.movedim(2,3)
+        conv_results = torch.empty_like(embedded)  # Create a new tensor for convolution results
+        for i in range(sentence_length):
+            #conv_input = embeddedt[:, i, :, :].reshape(batch_size, self.embedding_size, 6, 4)
+            #conv_results[:, i, :, :] = self.conv1(conv_input).reshape(batch_size, self.hidden_size, self.nodes)
+            conv_results[:, i, :, :] = self.gnn(x = embedded[:,i,:,:],edge_index=self.e_i,edge_weight=self.e_a).reshape(batch_size, self.nodes, self.hidden_size)
+        embeddedtt = conv_results#.movedim(3, 2)
+        """
+
+
+        #tempResult = self.linear(embedded.reshape((batch_size*sentence_length*self.nodes, self.hidden_size))).reshape((batch_size, sentence_length, self.nodes))
+        
+
+
+        # LSTM + GCN going "column-by-column" through the sentence
+
+        """
+        for t in range(sentence_length):
+
+            for layer in range(self.num_layers):
+
+                if layer == 0:
+                    hidden_l = self.gcn_cell_list[layer](
+                        embedded[:, t, :, :],
+                        self.e_i, self.e_a,
+                        (hidden[layer][0],hidden[layer][1])
+                        )
+                    #hidden_l = embedded[:, t, :, :]
+                else:
+                    hidden_l = self.gcn_cell_list[layer](
+                        hidden[layer - 1][0],
+                        self.e_i, self.e_a,
+                        (hidden[layer][0], hidden[layer][1])
+                        )
+                    #hidden_l = hidden[layer - 1]
+
+                hidden[layer] = hidden_l
+
+            #print(hidden_l[0].shape)
+            newTensor = self.linear(hidden_l[0].reshape((batch_size*self.nodes, self.hidden_size))).reshape((batch_size, 1, self.nodes))
+            #print (newTensor.shape)
+            #newTensorI = newTensor.unsqueeze(1)
+            #result_tensor[:,t,:] = newTensor
+            output_list1.append(newTensor)
+            #if (t == 0):
+            #    result_tensor = newTensorI
+            #else:
+            #    result_tensor = torch.cat((result_tensor, newTensorI), dim=1)
+            #print(hidden_l[0].shape,newTensor.shape, result_tensor.shape)
+        result_tensor = torch.cat(output_list1, dim=1)
+        """
+
+        #result_tensor = self.linear(embedded.reshape(batch_size*sentence_length* self.nodes, self.embedding_size)).reshape((batch_size, sentence_length, self.nodes)) 
+        
+        #newTensor11 = self.linear(embedded.reshape((batch_size*sentence_length,self.nodes, self.hidden_size))).reshape((batch_size, sentence_length, self.nodes))
+
+        #print(e_i.shape)
+        #print(e_a.shape)
+        #print(result_tensor.shape)
+        #print(result_tensor)
+        #print(tempResult.shape)
+
+        # result shape: (batch,sentence,nodes)
+        #return tempResult
+        return result_tensor
+
+
+
+
+def build_node_attention_mask(num_nodes, edge_index):
+    """
+    edge_index: shape (2, E)
+    Returns a (N, N) mask with 0 where attention is allowed, -inf where it's not
+    """
+    N = num_nodes
+    mask = torch.full((N, N), float('-inf'))  # disallowed by default
+    mask[torch.arange(N), torch.arange(N)] = 0  # allow self-attention
+
+    src, tgt = edge_index  # shape: (2, E)
+    mask[src, tgt] = 0  # allow attention on edges
+
+    return mask  # shape: (N, N)
+
+class GraphMaskedTransformerLayer(nn.Module):
+    def __init__(self, embedding_size, nhead=4, dropout=0.1):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(embed_dim=embedding_size, num_heads=nhead, batch_first=True)
+        self.norm1 = nn.LayerNorm(embedding_size)
+        self.norm2 = nn.LayerNorm(embedding_size)
+
+        self.ff = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            nn.ReLU(),
+            nn.Linear(embedding_size, embedding_size)
+        )
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, attn_mask):
+        # x: (B, N, E)
+        # attn_mask: (N, N) or (B, N, N)
+
+        if attn_mask.dim() == 2:
+            attn_mask = attn_mask.unsqueeze(0).expand(x.size(0), -1, -1)  # (B, N, N)
+
+        # Manual batch loop for variable masks (PyTorch doesn't support per-example mask in MultiheadAttention)
+        outputs = []
+        for i in range(x.size(0)):
+            attn_out, _ = self.attn(x[i:i+1], x[i:i+1], x[i:i+1], attn_mask=attn_mask[i])
+            x_norm = self.norm1(x[i:i+1] + self.dropout(attn_out))
+            ff_out = self.ff(x_norm)
+            outputs.append(self.norm2(x_norm + self.dropout(ff_out)))
+
+        return torch.cat(outputs, dim=0)  # (B, N, E)
+
+class GraphTransformer2D(nn.Module):
+    def __init__(self, input_size, embedding_size, num_nodes, sentence_length, e_i, e_a):
+        super().__init__()
+
+        #self.input_size = input_size[0]
+        #self.num_nodes = input_size[1]
+
+        self.embedding_size = embedding_size
+        self.num_nodes = num_nodes
+        self.sentence_length = sentence_length
+        self.input_size = input_size  # features per node
+
+        self.input_normalizer = LearnedInputNormalizer(in_channels=self.input_size, num_nodes=self.num_nodes)
+        self.scale_shift = ScaleShiftLayer(num_nodes)
+
+        self.input_proj = nn.Linear(input_size, embedding_size)
+
+        self.graph_transformer_layer = GraphMaskedTransformerLayer(embedding_size, nhead=4)
+        self.register_buffer("node_attn_mask", build_node_attention_mask(num_nodes, e_i))  # (N, N)
+
+        # Spatial (node-wise) Transformer
+        node_layer = nn.TransformerEncoderLayer(d_model=embedding_size, nhead=4, batch_first=True)
+        self.node_transformer = nn.TransformerEncoder(node_layer, num_layers=2)
+
+        # Temporal (time-wise) Transformer
+        time_layer = nn.TransformerEncoderLayer(d_model=embedding_size, nhead=4, batch_first=True)
+        self.time_transformer = nn.TransformerEncoder(time_layer, num_layers=2)
+
+        self.hv_mlp = nn.Sequential(
+            nn.Linear(1, 32),
+            nn.ReLU(),
+            nn.Linear(32, embedding_size)
+        )
+
+        self.film = FiLM(cond_dim=1, feature_dim=embedding_size)
+
+        self.nn_model = nn.ModuleList([nn.Sequential(
+            nn.Linear(self.embedding_size, 32, bias=True),
+            nn.BatchNorm1d(32),
+            nn.Dropout(0.5),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(32, self.embedding_size)
+        ) for _ in range(self.num_nodes)])
+
+        self.decoder = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            nn.ReLU(),
+            nn.Linear(embedding_size, 1)
+        )
+
+    def forward(self, input):
+        # input shape: (B, S, F, N)
+        B, S, F, N = input.shape
+        E = self.embedding_size
+        inputDeep = input.movedim(2, 3)  # (B, S, N, F)
+        hv_input = inputDeep[:, :, :, 1]  # (B, S, N)
+
+        input = self.input_normalizer(input)
+        inputDeep = input.movedim(2, 3)  # (B, S, N, F)
+        #inputDeep[:, :, :, 1] = 0
+
+        x = inputDeep.reshape(B * S, N, F)
+        x = self.input_proj(x)  # (B*S, N, E)
+
+        hv_flat = hv_input.reshape(B * S * N, 1)
+        #x = self.film(hv_flat, x)  # (B*S, N, E)
+
+        # Spatial attention
+        x = x.view(B * S, N, E)
+        x = self.graph_transformer_layer(x, self.node_attn_mask)  # graph-aware spatial attention
+        #x = self.node_transformer(x)  # (B*S, N, E)
+        x = x.view(B, S, N, self.embedding_size)
+
+        # Temporal attention
+        x = x.permute(0, 2, 1, 3)  # (B, N, S, E)
+        x = x.reshape(B * N, S, self.embedding_size)
+        x = self.time_transformer(x)  # (B*N, S, E)
+        x = x.view(B, N, S, self.embedding_size).permute(0, 2, 1, 3)  # (B, S, N, E)
+
+        output_list = []
+        for i in range(N):
+            embedded11 = self.nn_model[i](x[:,:,i,:].reshape((B*S, E)))
+            embedded11 = embedded11.reshape((B, S, 1, E))
+            output_list.append(embedded11)
+        x = torch.cat(output_list, dim=2)
+
+        out = self.decoder(x)  # (B, S, N, 1)
+        out = out.squeeze(-1)  # (B, S, N)
+
+        return self.scale_shift(out)
+
+
+
+class Conv2dLSTMCell(nn.Module):
+    def __init__(self, input_size, hidden_size, kernel_size, bias=True):
+        super(Conv2dLSTMCell, self).__init__()
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+        if type(kernel_size) == tuple and len(kernel_size) == 2:
+            self.kernel_size = kernel_size
+            self.padding = (kernel_size[0] // 2, kernel_size[1] // 2)
+        elif type(kernel_size) == int:
+            self.kernel_size = (kernel_size, kernel_size)
+            self.padding = (kernel_size // 2, kernel_size // 2)
+        else:
+            raise ValueError("Invalid kernel size.")
+
+        self.bias = bias
+        self.x2h = nn.Conv2d(in_channels=input_size[0],
+                             out_channels=hidden_size * 4,
+                             kernel_size=self.kernel_size,
+                             padding=self.padding,
+                             bias=bias)
+
+        self.h2h = nn.Conv2d(in_channels=hidden_size,
+                             out_channels=hidden_size * 4,
+                             kernel_size=self.kernel_size,
+                             padding=self.padding,
+                             bias=bias)
+        
+        self.Wc = nn.Parameter(torch.zeros((1, self.hidden_size * 3, input_size[1], input_size[2])))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        std = 1.0 / np.sqrt(self.hidden_size)
+        for w in self.parameters():
+            w.data.uniform_(-std, std)
+
+    def forward(self, input, hx=None):
+
+        # Inputs:
+        #       input: of shape (batch_size, input_size, height_size, width_size)
+        #       hx: of shape (batch_size, hidden_size, height_size, width_size)
+        # Outputs:
+        #       hy: of shape (batch_size, hidden_size, height_size, width_size)
+        #       cy: of shape (batch_size, hidden_size, height_size, width_size)
+
+
+        if hx == None:
+            hx = Variable(input.new_zeros(input.size(0), self.hidden_size, self.input_size[1], self.input_size[2]))
+            hx = (hx, hx)
+        hx, cx = hx
+
+        gates = self.x2h(input) + self.h2h(hx)
+
+        #print(input.shape, hx.shape, self.x2h(input).shape)
+
+        # Get gates (i_t, f_t, g_t, o_t)
+        input_gate, forget_gate, cell_gate, output_gate = gates.chunk(4, 1)
+
+        Wci, Wcf, Wco = self.Wc.chunk(3, 1)
+
+        #print(Wci.shape, cx.shape, input_gate.shape)
+        i_t = torch.sigmoid(input_gate + Wci * cx)
+        f_t = torch.sigmoid(forget_gate + Wcf * cx)
+        g_t = torch.tanh(cell_gate)
+
+        cy = f_t * cx + i_t * torch.tanh(g_t)
+        o_t = torch.sigmoid(output_gate + Wco * cy)
+
+        hy = o_t * torch.tanh(cy)
+
+
+        return (hy, cy)
+
+
+class Conv2dLSTM(nn.Module):
+    def __init__(self, input_size, embedding_size, hidden_size, kernel_size, num_layers, bias, output_size):
+        super(Conv2dLSTM, self).__init__()
+
+        self.input_size = input_size[0]
+        self.embedding_size = embedding_size
+        self.hidden_size = hidden_size
+        self.height = input_size[1]
+        self.width = input_size[2]
+
+        if type(kernel_size) == tuple and len(kernel_size) == 2:
+            self.kernel_size = kernel_size
+            self.padding = (kernel_size[0] // 2, kernel_size[1] // 2)
+        elif type(kernel_size) == int:
+            self.kernel_size = (kernel_size, kernel_size)
+            self.padding = (kernel_size // 2, kernel_size // 2)
+        else:
+            raise ValueError("Invalid kernel size.")
+
+        self.num_layers = num_layers
+        self.bias = bias
+        self.output_size = output_size
+
+        self.rnn_cell_list = nn.ModuleList([Conv2dLSTMCell((self.embedding_size,self.height,self.width),
+                                            self.hidden_size,
+                                            self.kernel_size,
+                                            self.bias) for _ in range(self.num_layers)])
+
+        #self.conv = nn.Conv2d(in_channels=self.hidden_size,
+        #                     out_channels=self.output_size,
+        #                     kernel_size=self.kernel_size,
+        #                     padding=self.padding,
+        #                     bias=self.bias)
+
+        self.conv1 = nn.Conv2d(in_channels=self.hidden_size, out_channels=1, kernel_size=(1, 1))
+
+        #self.nn_model = nn.ModuleList([nn.Sequential(
+        #    nn.Linear(self.input_size, 256, bias=True),
+        #    nn.BatchNorm1d(256),
+        #    nn.LeakyReLU(inplace=True),
+        #    nn.Linear(256, 256, bias=True),
+        #    nn.BatchNorm1d(256),
+        #    nn.LeakyReLU(inplace=True),
+        #    nn.Linear(256, embedding_size),
+        #    #nn.BatchNorm1d(embedding_dim)
+        #) for _ in range(self.height)])
+
+        self.intermediate_size = 8
+
+        self.nn_model = nn.ModuleList([nn.Sequential(
+            nn.Linear(self.intermediate_size, 256, bias=True),
+            #nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, self.embedding_size),
+            #nn.BatchNorm1d(self.intermediate_size)
+        ) for _ in range(self.height)])
+
+        self.nn_model2 = nn.Sequential(
+            #nn.Linear(self.intermediate_size, 256, bias=True),
+            nn.Linear(self.input_size, 256, bias=True),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, 256, bias=True),
+            nn.BatchNorm1d(256),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(256, self.intermediate_size),
+            nn.BatchNorm1d(self.intermediate_size)
+        )
+
+
+
+    def forward(self, input, hx=None):
+
+        batch_size = input.size(0)
+        sentence_length = input.size(1)
+
+        inputDeep = input.movedim(-3,-1)
+
+        inputDeep = inputDeep.reshape((batch_size*sentence_length*self.height*self.width, self.input_size))
+        inputDeep = (self.nn_model2(inputDeep)).reshape((batch_size, sentence_length, self.height, self.width, self.intermediate_size))
+
+        embedded1 = [inputDeep[:,:,i,:,:] for i in range(self.height)]
+        embedded = torch.Tensor(batch_size, sentence_length, 1, self.width, self.embedding_size)
+        for i in range(self.height):
+            embedded1[i] = (self.nn_model[i](embedded1[i].reshape((batch_size*sentence_length*self.width, self.intermediate_size))))
+            embedded1[i] = embedded1[i].reshape((batch_size, sentence_length, 1, self.width, self.embedding_size))
+            if (i == 0):
+                embedded = embedded1[i]
+            else:
+                embedded = torch.cat((embedded, embedded1[i]), dim=2)
+
+        #embedded = embedded.reshape((batch_size*sentence_length*self.height*self.width, self.intermediate_size))
+        #embedded = inputDeep.reshape((batch_size*sentence_length*self.height*self.width, self.input_size))
+        #embedded = (self.nn_model2(embedded)).reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
+        
+        #inputDeep1 = inputDeep.reshape((batch_size*sentence_length, self.height*self.width*self.input_size))
+        #embedded = self.nn_model(inputDeep1)
+        #embedded = embedded.reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
+
+        #inputDeep1 = inputDeep.reshape((batch_size*sentence_length*self.height*self.width, self.input_size))
+        #print(inputDeep.shape, inputDeep1.shape)
+        #embedded = self.nn_model(inputDeep1)
+        #embedded = embedded.reshape((batch_size, sentence_length, self.height, self.width, self.embedding_size))
+        embedded = embedded.movedim(-1,-3)
+        #print(embedded.shape, input.shape)
+
+
+        # Input of shape (batch_size, seqence length , input_size)
+        #
+        # Output of shape (batch_size, sentence_length, output_size)
+
+        if hx == None:
+            if torch.cuda.is_available():
+                h0 = Variable(torch.zeros(self.num_layers, input.size(0), self.hidden_size, self.height, self.width).cuda())
+            else:
+                h0 = Variable(torch.zeros(self.num_layers, input.size(0), self.hidden_size, self.height, self.width))
+        else:
+             h0 = hx
+
+        #outs = torch.Tensor(batch_size, input.size(1), self.output_size, self.height, self.width)
+
+        hidden = list()
+        for layer in range(self.num_layers):
+            hidden.append((h0[layer], h0[layer]))
+
+        
+        result_tensor = torch.Tensor(batch_size, 1, self.height, self.width)
+        for t in range(input.size(1)):
+
+            for layer in range(self.num_layers):
+
+                if layer == 0:
+                    hidden_l = self.rnn_cell_list[layer](
+                        embedded[:, t, :],
+                        (hidden[layer][0],hidden[layer][1])
+                        )
+                else:
+                    hidden_l = self.rnn_cell_list[layer](
+                        hidden[layer - 1][0],
+                        (hidden[layer][0], hidden[layer][1])
+                        )
+
+                hidden[layer] = hidden_l
+
+            #print(hidden_l[0].shape)
+            newTensor = self.conv1(hidden_l[0])
+            #print (newTensor.shape)
+            newTensorI = newTensor.squeeze().unsqueeze(1)
+            if (t == 0):
+                result_tensor = newTensorI
+            else:
+                result_tensor = torch.cat((result_tensor, newTensorI), dim=1)
+            #print(hidden_l[0].shape,newTensor.shape, result_tensor.shape)
+
+        #torch.stack(outs)
+        #torch.cat(outs,)
+
+
+        #out = outs.squeeze()
+
+        #out = self.conv(out)
+
+        #print("a", result_tensor.shape)
+
+        return result_tensor
+
