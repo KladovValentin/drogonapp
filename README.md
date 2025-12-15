@@ -1,5 +1,5 @@
 
-# drogonapp
+# Real-Time Calibration Prediction Framework for HADES at GSI/FAIR
 
 **Real-Time Calibration Prediction Framework for HADES at GSI/FAIR**
 
@@ -37,7 +37,7 @@ Thus, for now you can mainly take a look at the source code to get some ideas:
 
 
 
-## ⚙ Setup & Usage (by chatGPT)
+## ⚙ Setup & Usage
 
 ### 🔧 Prerequisites
 
