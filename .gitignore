@@ -23,6 +23,7 @@ env/
 *.root
 *.dat
 *.pcm
+*.pdf
 runlist*
 runs*
 elapsed*
