@@ -1,5 +1,4 @@
-# System/build dependencies inferred from backend/ (CMake + includes)
-# OS package names vary by distro; this is a logical list.
+# System/build dependencies for backend/
 
 # Build tools
 cmake
@@ -17,8 +16,25 @@ postgresql-client-dev (libpq headers/libs)
 # Oracle Instant Client (manual install)
 oracle-instantclient (libclntsh, libclntshcore, libnnz + SDK headers)
 
-# Python embedding
+# Python and python embedding
 python3-dev (Python.h)
+
+# Python ML training (backend/function_prediction)
+python3
+pip
+torch
+torchvision
+torch-geometric
+numpy
+pandas
+matplotlib
+pyarrow
+uproot
+tqdm
+pympler
+scipy
+networkx
+pyroot (ROOT python bindings)
 
 # Onnx Runtime (manual install)
 onnxruntime (C++ headers + libonnxruntime.so)
