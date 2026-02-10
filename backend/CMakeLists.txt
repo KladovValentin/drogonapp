@@ -54,7 +54,7 @@ message(STATUS "OCI_LIB_DIR: ${OCI_LIB_DIR}")
 
 find_library(OCI_LIB NAMES clntsh HINTS ${OCI_LIB_DIR})
 find_library(OCI_CORE_LIB NAMES clntshcore HINTS ${OCI_LIB_DIR})
-find_library(OCI_COMMON_LIB NAMES nnz12 HINTS ${OCI_LIB_DIR})
+find_library(OCI_COMMON_LIB NAMES nnz nnz12 HINTS ${OCI_LIB_DIR})
 
 # Print the paths to the libraries found
 message(STATUS "OCI_LIB: ${OCI_LIB}")
@@ -69,13 +69,21 @@ if(NOT OCI_CORE_LIB)
     message(FATAL_ERROR "clntshcore library not found")
 endif()
 if(NOT OCI_COMMON_LIB)
-    message(FATAL_ERROR "nnz12 library not found")
+    message(FATAL_ERROR "nnz (or nnz12) library not found")
 endif()
 
 # Find Python interpreter
 find_package(Python REQUIRED COMPONENTS Development)
 find_package(Drogon CONFIG REQUIRED)
 find_package(ROOT REQUIRED COMPONENTS RHTTP)
+find_package(JsonCpp QUIET)
+if (NOT JsonCpp_FOUND)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+    add_library(JsonCpp::JsonCpp INTERFACE IMPORTED)
+    target_include_directories(JsonCpp::JsonCpp INTERFACE ${JSONCPP_INCLUDE_DIRS})
+    target_link_libraries(JsonCpp::JsonCpp INTERFACE ${JSONCPP_LIBRARIES})
+endif()
 target_link_libraries(${PROJECT_NAME}
         PRIVATE Drogon::Drogon
         ${ROOT_LIBRARIES}
@@ -83,6 +91,7 @@ target_link_libraries(${PROJECT_NAME}
         /home/localadmin_jmesschendorp/onnxruntime-linux-x64-1.14.1/lib/libonnxruntime.so.1.14.1
         ${OCI_LIB} ${OCI_CORE_LIB} ${OCI_COMMON_LIB}
         -lpqxx
+        JsonCpp::JsonCpp
 )
 
 # ##############################################################################
@@ -131,7 +140,18 @@ target_sources(${PROJECT_NAME}
                ${PLUGIN_SRC}
                ${MODEL_SRC})
 # ##############################################################################
+# Standalone helper tools
+add_executable(fetchNewRuns fetchNewRuns.cc)
+add_executable(fetchNewCalibrations fetchNewCalibrations.cc)
+set_target_properties(fetchNewRuns fetchNewCalibrations PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(fetchNewRuns PRIVATE JsonCpp::JsonCpp)
+target_link_libraries(fetchNewCalibrations PRIVATE JsonCpp::JsonCpp)
 # uncomment the following line for dynamically loading views 
 # set_property(TARGET ${PROJECT_NAME} PROPERTY ENABLE_EXPORTS ON)
 
 # ##############################################################################
+
+
+# in case it complains on the nnz or oracle stuff, export the path to your installation manually: export LD_LIBRARY_PATH=$HOME/lib/instantclient_23_5:$LD_LIBRARY_PATH

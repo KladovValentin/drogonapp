@@ -29,6 +29,7 @@ runs*
 elapsed*
 out*
 predicted**.txt
+test*
 
 backend/serverData/info_tables/*
 backend/serverData/histLists/*

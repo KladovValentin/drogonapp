@@ -13,8 +13,8 @@
 
 #include <jsoncpp/json/json.h>
 
-/// g++ -o getchNewRuns fetchNewRuns.cc
-/// ./getchNewRuns > outputRun.log 2>&1 &
+/// g++ -std=c++17 -o fetchNewRuns fetchNewRuns.cc $(pkg-config --cflags --libs jsoncpp)
+/// ./fetchNewRuns > outputRun.log 2>&1 &
 
 namespace fs = std::filesystem;
 using namespace std;
