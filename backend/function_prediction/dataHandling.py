@@ -51,7 +51,7 @@ class Graph_dataset(torch.utils.data.Dataset):
 # --- Graph Creation ---
 
 def make_graph(config):
-    cells_length = 12  
+    cells_length = 24
     edges = []
 
     for i in range(cells_length):
@@ -69,7 +69,7 @@ def make_graph(config):
 
 def load_dataset(config, df):
     # transform to numpy, assign types, split on features-labels
-    cellsLengthToUse = 12
+    cellsLengthToUse = 24
     sentenceLength, cellsLength, channelsLength = config.sentenceLength, config.cellsLength, config.channelsLength
     dfn = df.to_numpy()
 
@@ -434,20 +434,21 @@ class DataManager():
         #print(dftCorr)
         
 
-        baseTrainRange = int(dftCorr.shape[0]*0.7)
-        leftRange = int((dftCorr.shape[0] - baseTrainRange -10))
+        baseTrainRange = int(dftCorr.shape[0]*0.2)
+        leftRange = int((dftCorr.shape[0] - baseTrainRange)/30)
         retrainIndex = ind
-        retrain0 = baseTrainRange + leftRange*(retrainIndex-3)
+        retrain0 = baseTrainRange + leftRange*(retrainIndex-5)
         #retrain0 = max(max(baseTrainRange + 200*(int(retrainIndex/2)-4), baseTrainRange + 100*(int(retrainIndex)-10)), int(baseTrainRange/20))
-        #retrain1 = baseTrainRange + leftRange*retrainIndex
-        #retrain2 = baseTrainRange + leftRange*(retrainIndex+1)
-        retrain1 = int(baseTrainRange*0.8 + leftRange*retrainIndex)
-        retrain2 = int(baseTrainRange)
+        retrain1 = baseTrainRange + leftRange*retrainIndex
+        retrain2 = baseTrainRange + leftRange*(retrainIndex+1)
+        #retrain1 = int(baseTrainRange*0.8 + leftRange*retrainIndex)
+        #retrain2 = int(baseTrainRange)
         if (retrainIndex == 0):
             #dftTV = dftCorr.iloc[int(dftCorr.shape[0]*0.2):baseTrainRange].copy()
-            dftTV = dftCorr.iloc[:baseTrainRange].copy()
+            dftTV = dftCorr.iloc[:retrain1].copy()
         else:
             dftTV = dftCorr.iloc[retrain0:retrain1].copy()
+            #dftTV = dftCorr.iloc[:retrain1].copy()
         dftTrainV = dftTV.copy()
         dftTest = dftCorr.iloc[retrain1:retrain2].copy()
 
@@ -464,11 +465,11 @@ class DataManager():
         dftTest = self.cutDataset(dftTest,  threshold=10).copy()
 
         # additional recalculation of mean with cut dataset
-        #if (mod.startswith("train")):
-        #    mean, std = self.meanAndStdTable(dftTrainV)
-        #    writeTrainData(mean,std, pathFP, "")
-        #    dftTrainV = self.cutDataset(dftTrainV)
-        #    dftTest = self.cutDataset(dftTest)
+        if (mod.startswith("train")):
+            mean, std = self.meanAndStdTable(dftTrainV)
+            writeTrainData(mean,std, pathFP, "")
+            dftTrainV = self.cutDataset(dftTrainV)
+            dftTest = self.cutDataset(dftTest)
 
         print(dftTrainV)
         print(dftTest)
@@ -476,10 +477,14 @@ class DataManager():
         pq.write_table(pa.Table.from_pandas(dftTest), pathFP + 'tesu.parquet')
 
         dftTrainV1 = self.normalizeDatasetNormal(dftTrainV)
+        dftTest1 = self.normalizeDatasetNormal(dftTest)
 
         mean1, std1 = self.meanAndStdTable(dftTrainV1)
         print("mean values: " + str(mean1))
         print("std  values: " + str(std1))
+
+        pq.write_table(pa.Table.from_pandas(dftTrainV1), pathFP + 'simuNormalized.parquet')
+        pq.write_table(pa.Table.from_pandas(dftTest1), pathFP + 'tesuNormalized.parquet')
 
 
     def manageDatasetCosmics(self, mod,ind):
@@ -488,7 +493,7 @@ class DataManager():
         dir = str(Path(__file__).parents[1])
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTarget.dat")      # main that was used before cosmic tries
         #dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_10mins.dat")     # for cosmics
-        dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_56_9a.dat")     # for cosmics
+        dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_56_9.dat")     # for cosmics
         #dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_56106_9.dat")     # for cosmics
         #print(dftCorr)
         

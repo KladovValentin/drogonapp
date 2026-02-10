@@ -6,7 +6,7 @@ from predict import loadModel
 from dataHandling import make_graph
 from config import Config
 
-mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
+mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
 path = mainPath+"function_prediction/"
 
 def get_grid_layout(rows=2, cols=6):
@@ -21,7 +21,7 @@ def plot_graph(threshold=None):
 
     e_i, e_a = make_graph(Config())
 
-    input_dim = torch.Size([1, Config().channelsLength, 12])
+    input_dim = torch.Size([1, Config().channelsLength+1, 24])
 
     nn_model = loadModel(Config(), input_dim, 1, path, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
     edge_weights = nn_model.e_a.detach().cpu().numpy()
@@ -42,7 +42,7 @@ def plot_graph(threshold=None):
     edges = G.edges()
     weights = [G[u][v]['weight'] for u,v in edges]
 
-    pos = get_grid_layout(rows=2, cols=6)
+    pos = get_grid_layout(rows=4, cols=6)
 
     plt.figure(figsize=(8,6))
     #nx.draw(G, pos, with_labels=True, node_color='skyblue', node_size=700,
@@ -53,14 +53,15 @@ def plot_graph(threshold=None):
     nx.draw_networkx_edges(G, pos, edgelist=edges,
                            edge_color=weights,
                            edge_cmap=plt.cm.viridis,
-                           width=2,
-                           connectionstyle='arc3,rad=0.2')
+                           width=2)
+                           #connectionstyle='arc3,rad=0.2')
 
     sm = plt.cm.ScalarMappable(cmap=plt.cm.viridis,
                                norm=plt.Normalize(vmin=min(weights), vmax=max(weights)))
     sm.set_array([])
-    plt.colorbar(sm, label='Edge Weight')
-    plt.title("Graph with Trained Edge Weights")
+    cbar = plt.colorbar(sm)
+    cbar.set_label("Edge Weight", fontsize=14)
+    plt.title("")
     plt.show()
 
 plot_graph()

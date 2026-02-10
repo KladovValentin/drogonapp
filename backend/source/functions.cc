@@ -2,7 +2,7 @@
 
 //#include "../include/constants.h"
 
-const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
+const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/";
 
 using namespace std;
 
@@ -414,10 +414,10 @@ vector< pair<int,int> > dateRunF::loadrunlistWithEnds(int run1, int run2){
     ifstream fin1;
 	//fin1.open((saveLocation+"runlistzxc.dat").c_str());
     //fin1.open((saveLocation+"runlist.dat").c_str());
-    //fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runList.dat");
+    fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runList.dat");
     //fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runListCosmics106.dat");
     //fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runListBeam25.dat");
-    fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runListBeam24.dat");
+    //fin1.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/runListBeam24.dat");
     int run = 0; int runEnd = 0;
     while (fin1 >> run >> runEnd){
         if (run <= run1 || runEnd >= run2)

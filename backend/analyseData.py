@@ -1,5 +1,8 @@
 import numpy as np
 import ROOT
+import pandas
+import os
+from array import array
 
 def _pearson_corr(x: np.ndarray, y: np.ndarray) -> float:
     """Pearson correlation, robust to constant inputs."""
@@ -194,15 +197,15 @@ def plot_feature_correlations_root(
     ROOT.gPad.SetGridy()
     h_p_signed = _make_hist("h_p_signed", pearson_mean, "", -1.1, 1.1)
     h_s_signed = _make_hist("h_s_signed", spearman_mean, "", -1.1, 1.1)
-    h_p_signed.SetLineColor(ROOT.kAzure + 2)
-    h_p_signed.SetFillColor(ROOT.kAzure - 9)
+    h_p_signed.SetLineColor(ROOT.kBlue)
+    h_p_signed.SetFillColor(ROOT.kBlue)
     h_p_signed.SetLineWidth(2)
     h_p_signed.SetFillStyle(3004)
     h_p_signed.GetXaxis().SetTitleOffset(1.25)
     h_p_signed.GetYaxis().SetTitleOffset(1.0)
 
-    h_s_signed.SetLineColor(ROOT.kOrange + 7)
-    h_s_signed.SetFillColor(ROOT.kOrange - 3)
+    h_s_signed.SetLineColor(ROOT.kBlack)
+    h_s_signed.SetFillColor(ROOT.kBlack)
     h_s_signed.SetLineWidth(2)
     h_s_signed.SetFillStyle(3005)
     h_p_signed.Draw("HIST")
@@ -217,15 +220,15 @@ def plot_feature_correlations_root(
     ROOT.gPad.SetGridy()
     h_p_abs = _make_hist("h_p_abs", pearson_abs_mean, "", 0.0, 1.1)
     h_s_abs = _make_hist("h_s_abs", spearman_abs_mean, "", 0.0, 1.1)
-    h_p_abs.SetLineColor(ROOT.kAzure + 2)
-    h_p_abs.SetFillColor(ROOT.kAzure - 9)
+    h_p_abs.SetLineColor(ROOT.kBlue)
+    h_p_abs.SetFillColor(ROOT.kBlue)
     h_p_abs.SetLineWidth(2)
     h_p_abs.SetFillStyle(3004)
     h_p_abs.GetXaxis().SetTitleOffset(1.25)
     h_p_abs.GetYaxis().SetTitleOffset(1.0)
 
-    h_s_abs.SetLineColor(ROOT.kOrange + 7)
-    h_s_abs.SetFillColor(ROOT.kOrange - 3)
+    h_s_abs.SetLineColor(ROOT.kBlack)
+    h_s_abs.SetFillColor(ROOT.kBlack)
     h_s_abs.SetLineWidth(2)
     h_s_abs.SetFillStyle(3005)
     h_p_abs.Draw("HIST")
@@ -239,8 +242,8 @@ def plot_feature_correlations_root(
     c.Update()
     return c
 
-# Example usage:
-if __name__ == "__main__":
+
+def plotCorrelations():
     corr = compute_mdc_feature_target_correlations(
          "serverData/nn_input/outNNFitTargetBeam24_9.dat",
          n_channels=24,
@@ -250,13 +253,9 @@ if __name__ == "__main__":
          ignore_zero_targets=False,
     )
     featuresNames = ["P","HV","CO2","#DeltaP","H2O","Dew","T","N2","O2"]
-    canvas = plot_feature_correlations_root(corr, feature_names=featuresNames)
-    if not ROOT.gROOT.IsBatch():
-        try:
-            input("Press Enter to exit and close the plot window...")
-        except KeyboardInterrupt:
-            pass
+    return plot_feature_correlations_root(corr, feature_names=featuresNames)
 
+    
 # If you want the full per-channel matrix for a given feature as a heatmap:
 def plot_channel_feature_heatmap_root(corr_dict, which="pearson"):
     """
@@ -281,3 +280,121 @@ def plot_channel_feature_heatmap_root(corr_dict, which="pearson"):
     h2.Draw("COLZ TEXT")
     c.Update()
     return c
+
+
+
+
+def compareInitialDistributions(aggregate_all: bool = False):
+    mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
+    pathFP = mainPath + 'function_prediction/'
+
+    dftSim = pandas.read_parquet(pathFP + 'simuNormalized.parquet')
+    dftExp = pandas.read_parquet(pathFP + 'tesuNormalized.parquet')
+
+    print(dftSim)
+    #selectionExp = (dftExp['beta']>1)
+    #dftExp = dftExp.loc[selectionExp].copy().reset_index()
+    #selectionSim = (dftSim['beta']>1)
+    #dftSim = dftSim.loc[selectionSim].copy().reset_index()
+    #dftSim = dftSim.loc[dftSim['pid'] == 3]
+    #dftExp = dftExp.loc[dftExp['pid'] == 4]
+
+    inputsLength = len(dftSim.columns)-1
+    class_histS = [dftSim[(list(dftSim.columns)[i])].to_numpy() for i in range(inputsLength)]
+    class_histE = [dftExp[(list(dftExp.columns)[i])].to_numpy() for i in range(inputsLength)]
+
+    lowBord = [np.mean(class_histS[i]) - 4 * np.std(class_histS[i]) for i in range(inputsLength)]
+    upBord = [np.mean(class_histS[i]) + 4 * np.std(class_histS[i]) + 8*np.std(class_histS[i])/200 for i in range(inputsLength)]
+    step = [8*np.std(class_histS[i])/200 for i in range(inputsLength)]
+    print(lowBord[0])
+    print(upBord[0])
+    print(step[0])
+    #bins = [np.arange(lowBord[i], upBord[i], step[i]) for i in range(inputsLength)]
+
+    # Create a 3x3 grid of subplots
+    #fig, axes = plt.subplots(3, 4, figsize=(10, 8))
+
+    c = ROOT.TCanvas(f"c_comp_{0}", "aaaa", 1100, 900)
+    canvases = []
+
+    i = 1
+    if aggregate_all:
+        title = "All Columns"
+        data_sim = np.concatenate(class_histS)
+        data_exp = np.concatenate(class_histE)
+    else:
+        title = str(list(dftSim.columns)[i + 1])
+        data_sim = class_histS[i + 1]
+        data_exp = class_histE[i + 1]
+
+    h_sim = ROOT.TH1D(f"h_sim_{i}", title, 40, -3.5, 3.5)
+    h_exp = ROOT.TH1D(f"h_exp_{i}", title, 40, -3.5, 3.5)
+
+    h_sim.SetStats(0)
+    h_exp.SetStats(0)
+
+    for v in data_sim:
+        h_sim.Fill(float(v))
+    for v in data_exp:
+        h_exp.Fill(float(v))
+
+    #if h_sim.Integral() > 0.0:
+    #    h_sim.Scale(1.0 / h_sim.Integral(), "width")
+    #if h_exp.Integral() > 0.0:
+    #    h_exp.Scale(1.0 / h_exp.Integral(), "width")
+
+    h_sim.SetLineColor(ROOT.kBlue)
+    h_sim.SetFillColor(ROOT.kBlue)
+    h_sim.SetLineWidth(2)
+    h_sim.SetFillStyle(3004)
+
+    h_exp.SetLineColor(ROOT.kRed-2)
+    h_exp.SetFillColor(ROOT.kRed-2)
+    h_exp.SetLineWidth(2)
+    h_exp.SetFillStyle(3005)
+    
+
+    h_sim.SetTitle(";Atmospheric pressure [a.u.];Runs count")
+    h_sim.GetXaxis().SetTitleSize(0.045)
+    h_sim.GetYaxis().SetTitleSize(0.045)
+    h_sim.GetXaxis().SetTitleOffset(0.95)
+    h_sim.GetYaxis().SetTitleOffset(1.0)
+    y_max = max(h_sim.GetMaximum(), h_exp.GetMaximum()) * 1.1
+    h_sim.SetMaximum(y_max)
+    h_sim.Draw("HIST")
+    h_exp.Draw("HIST SAME")
+
+    leg = ROOT.TLegend(0.55, 0.7, 0.85, 0.85)
+    leg.AddEntry(h_sim, "Train set", "lef")
+    leg.AddEntry(h_exp, "Test set", "lef")
+    leg.Draw()
+
+    latex = ROOT.TLatex()
+    latex.SetNDC()
+    latex.SetTextSize(0.04)
+    #latex.DrawLatex(0.15, 0.85, "Module 1, Sector 1")
+
+    c.Update()
+    return c
+        
+    #fig.suptitle('"Feature" distributions, 9/128, both train AND validation dataset', fontsize=16)
+
+    #plt.show()
+
+
+
+
+
+
+
+
+
+# Example usage:
+if __name__ == "__main__":
+    #canvas = plotCorrelations()
+    canvases = compareInitialDistributions()
+    if not ROOT.gROOT.IsBatch():
+        try:
+            input("Press Enter to exit and close the plot window...")
+        except KeyboardInterrupt:
+            pass

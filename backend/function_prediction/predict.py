@@ -21,6 +21,9 @@ from config import Config
 import torch.jit
 from scipy.stats import norm
 import time
+import locale
+locale.setlocale(locale.LC_NUMERIC, "C")
+import ROOT
 
 activations = {}
 
@@ -36,9 +39,9 @@ def loadModel(config, input_dim, nClasses, path, e_i=0,e_a=0):
     if (config.modelType == "ConvLSTM"):
         nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1)
     elif (config.modelType == "gConvLSTM"):
-        #nn_model = GCNLSTM(input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
+        nn_model = GCNLSTM(input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
         #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
-        nn_model = GraphTransformer2D(input_size = input_dim[-2], embedding_size=8, num_nodes = input_dim[-1], sentence_length = input_dim[-3], e_i=e_i, e_a=e_a)
+        #nn_model = GraphTransformer2D(input_size = input_dim[-2], embedding_size=8, num_nodes = input_dim[-1], sentence_length = input_dim[-3], e_i=e_i, e_a=e_a)
     nn_model.type(torch.FloatTensor)
     nn_model.load_state_dict(torch.load(path+"tempModelT.pt"))
     nn_model.eval()
@@ -87,7 +90,7 @@ def checkDistributions():
 
 def getHV(model,X):
     model.eval()
-    nodes_length = 12
+    nodes_length = 24
     # Example input X with features in each node (batch_size, num_nodes, feature_dim)
 
     feature_index = 1  # The specific feature in the node you want to modify
@@ -132,7 +135,7 @@ def getHV(model,X):
     return final_x_i.clone().detach(), Y_pred
 
 
-def makePredicionList(config, experiment_path, savePath, path):
+def makePredicionList(config, dataManager, experiment_path, savePath, path):
     dftCorr = pandas.read_parquet(path+ experiment_path+'.parquet')
     #dftCorr shape is (batch, 1+features*nodes+2*nodes)
 
@@ -231,7 +234,7 @@ def makePredicionList(config, experiment_path, savePath, path):
 
     #plotHiddenFeatures()
 
-    inject_and_predict_hv_sweep(nn_model, config, path, experiment_path)
+    #inject_and_predict_hv_sweep(nn_model, config, dataManager, path, experiment_path)
 
     print(f"Prediction time: {end_time - start_time:.6f} seconds")
     print(f"Time per prediction: {(end_time - start_time)*1000.0/xt.shape[0]:.6f} ms")
@@ -250,7 +253,7 @@ def plotHiddenFeatures():
     plt.show()
 
 
-def inject_and_predict_hv_sweep(model, config, path, experiment_path):
+def inject_and_predict_hv_sweep(model, config, dataManager, path, experiment_path):
     activations.clear()  # Clear previous activations
     #for i, submodel in enumerate(model.nn_model):
     #    submodel[0].register_forward_hook(capture_input(f"nn_model_branch_{i}"))
@@ -472,6 +475,24 @@ def draw_predictions_minus_target(dftable, dftable2):
     rolling_std_test_targets = []
     rolling_std_test = []
 
+    htrain_diff = ROOT.TH1D("diffClass", "", 200, -5, 5)
+    htrain_diff.GetXaxis().SetTitle("#Delta ToT, #sigma")
+    htrain_diff.GetYaxis().SetTitle("Counts")
+    htrain_diff.GetXaxis().SetTitleSize(0.05)
+    htrain_diff.GetYaxis().SetTitleSize(0.05)
+    htrain_diff.SetLineColor(4)
+    htrain_diff_delayedCalib = ROOT.TH1D("diffDelayed", "", 200, -5, 5)
+    htrain_diff_referencePoint = ROOT.TH1D("diffReference", "", 200, -5, 5)
+    htrain_diff_delayedCalib.SetLineColor(2)
+    htrain_diff_referencePoint.SetLineColor(1)
+    htrain_diff.SetStats(0)
+    htrain_diff.SetLineWidth(2)
+    htrain_diff_delayedCalib.SetLineWidth(2)
+    htrain_diff_referencePoint.SetLineWidth(2)
+
+    ROOT.TGaxis.SetMaxDigits(3)
+    ROOT.gStyle.SetStripDecimals(True)
+
     for i in range(rangeNodes):
         # Get prediction array for rolling std and variance
         predictions_train = nptable[:, i + 1 + 2 * chLength].astype(float)
@@ -504,14 +525,28 @@ def draw_predictions_minus_target(dftable, dftable2):
         #scale = np.std(nptable2[:, i + 1].astype(float))
         train_diff = (nptable[:, i + 1] - nptable[:, i + 1 + 2 * chLength]) / 3 / scale
         test_diff = (nptable2[:, i + 1] - nptable2[:, i + 1 + 2 * chLength]) / 3 / scale2
+
+        shift = 100
+        train_diff_delayedCalib = (nptable[shift:, i+1] - nptable[:-shift, i+1]) / (3 * scale[shift:])  #train_diff[k] corresponds to original j = k + 20
+        train_diff_referencePoint = (nptable[shift:, i+1] - (nptable[:-shift, i+1] + nptable[shift:, i+1+2*chLength] - nptable[:-shift, i+1+2*chLength] ) ) / (3 * scale[shift:])  
+
+        for val in train_diff[shift:]:
+            htrain_diff.Fill(val)
+        for val in train_diff_delayedCalib:
+            htrain_diff_delayedCalib.Fill(val)
+        for val in train_diff_referencePoint:
+            htrain_diff_referencePoint.Fill(val)
+
         rms_train = np.sqrt(np.mean(train_diff ** 2))
         rms_test = np.sqrt(np.mean(test_diff ** 2))
         rms_train_list.append(rms_train)
         rms_test_list.append(rms_test)
         plt.hist(train_diff, bins, color='#8b2522', alpha=0.7, rwidth=0.95, label = '$\Delta train$')
-        plt.hist(test_diff, bins, color='#228B22', alpha=0.7, rwidth=0.95, label = '$\Delta test$')
-        if i == 0:
-            plt.show()
+        plt.hist(train_diff_delayedCalib, bins, color="#228b2b", alpha=0.7, rwidth=0.95, label = '$\Delta delayed$')
+        plt.hist(train_diff_referencePoint, bins, color="#22248b", alpha=0.7, rwidth=0.95, label = '$\Delta reference$')
+        #plt.hist(test_diff, bins, color='#228B22', alpha=0.7, rwidth=0.95, label = '$\Delta test$')
+        #if i == 0:
+        #    plt.show()
     avg_rms_train = np.mean(rms_train_list)
     avg_rms_test = np.mean(rms_test_list)
     avg_variance_train = np.mean([std_val.mean() for std_val in rolling_std_train])
@@ -522,13 +557,46 @@ def draw_predictions_minus_target(dftable, dftable2):
     print(f"RMS (test) per node: {rms_test_list}")
     print(f"Average RMS (train): {avg_rms_train:.4f}")
     print(f"Average RMS (test: {avg_rms_test:.4f}")
-    print(f"RMS drop: {(avg_rms_test/avg_rms_train-1)*100:.4f}")
+    print(f"Robustness: {(avg_rms_train/avg_rms_test)*100:.4f}")
     print(f"Average Precision (train) over {rangeNodes} nodes: {avg_variance_train/avg_variance_train_targets*100:.4f}")
     print(f"Average Precision (test) over {rangeNodes} nodes: {avg_variance_test/rolling_std_test_targets*100:.4f}")
     plt.grid(axis='y', alpha=0.75)
     plt.xlabel('run number')
     plt.ylabel('dE/dx, a.u.')
-    plt.show()
+    #plt.show()
+
+    c = ROOT.TCanvas("c_corr", "corr", 1000, 1000)
+    c.SetGridx()
+    htrain_diff.Draw()
+    htrain_diff_delayedCalib.Draw("same")
+    htrain_diff_referencePoint.Draw("same")
+    leg_abs = ROOT.TLegend(0.55, 0.75, 0.9, 0.9)
+    leg_abs.AddEntry(htrain_diff, "Predictor", "lpe")
+    leg_abs.AddEntry(htrain_diff_delayedCalib, "Delayed offline", "lpe")
+    leg_abs.AddEntry(htrain_diff_referencePoint, "From reference", "lpe")
+    leg_abs.Draw()
+    c.Update()
+
+    stats = ROOT.TPaveText(0.55, 0.55, 0.9, 0.74, "NDC")
+    stats.SetFillColor(0)
+    stats.SetBorderSize(1)
+    stats.SetTextAlign(12)
+
+    def add_stats(label, h):
+        stats.AddText(f"{label}: mean={h.GetMean():.3f}, RMS={h.GetRMS():.3f}")
+
+    add_stats("Predictor", htrain_diff)
+    add_stats("Delayed offline", htrain_diff_delayedCalib)
+    add_stats("From reference", htrain_diff_referencePoint)
+
+    stats.Draw()
+    c.Update()
+
+    if not ROOT.gROOT.IsBatch():
+        try:
+            input("Press Enter to exit and close the plot window...")
+        except KeyboardInterrupt:
+            pass
 
 
 
@@ -582,37 +650,41 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
 def predict_nn(fName, oName, path):
     config = Config()
 
-    predictionList = makePredicionList(config, fName, oName, path)
+    mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
+    dataManager = DataManager(mainPath)
+
+    predictionList = makePredicionList(config, dataManager, fName, oName, path)
     #print(predictionList)
 
     #write_output(predictionList,mod,enlist)
 
 def predict_cicle(testNum):
-    mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
+    mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
+    path = mainPath+"function_prediction/"
     predict_nn("tesu",'predicted1_'+str(testNum), path)
     predict_nn("simu",'predicted_'+str(testNum), path)
 
 
-mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
-dataManager = DataManager(mainPath)
-path = mainPath+"function_prediction/"
+if __name__ == "__main__":
+    mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
+    path = mainPath+"function_prediction/"
 
-#print("start python predict")
-test = 0
-predict_nn("tesu",'predicted1_'+str(test), path)
-predict_nn("simu",'predicted_'+str(test), path)
+    #print("start python predict")
+    test = 0
+    #predict_nn("tesu",'predicted1_'+str(test), path)
+    #predict_nn("simu",'predicted_'+str(test), path)
 
-analyseOutput(path+"predicted/predicted_"+str(test),path+"simu", path+"predicted/predicted1_"+str(test),path+"tesu")
+    #analyseOutput(path+"predicted/predicted_"+str(test),path+"simu", path+"predicted/predicted1_"+str(test),path+"tesu")
 
-#analyseOutput(path+"predictedSim.parquet",path+"simu.parquet")
-
-
-#predict_nn("tesuCosmic",'predictedCosmics1_', path)
-#predict_nn("simuCosmic",'predictedCosmics_', path)
-
-#analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
-
-#analyseOutput(path+"predictedCosmics.parquet",path+"simu.parquet")
+    #analyseOutput(path+"predictedSim.parquet",path+"simu.parquet")
 
 
-#plot_tot_vs_hv_and_heatmap(path=path)
+    predict_nn("tesuCosmic",'predictedCosmics1_', path)
+    predict_nn("simuCosmic",'predictedCosmics_', path)
+
+    analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
+
+    #analyseOutput(path+"predictedCosmics.parquet",path+"simu.parquet")
+
+
+    #plot_tot_vs_hv_and_heatmap(path=path)

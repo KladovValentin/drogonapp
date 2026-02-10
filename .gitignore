@@ -35,4 +35,5 @@ backend/serverData/histLists/*
 backend/serverData/nn_input/*
 backend/serverData/qaHists/*
 backend/serverData/function_prediction/prediction/*
+backend/serverData/function_prediction/*
 backend/faiss_store/*

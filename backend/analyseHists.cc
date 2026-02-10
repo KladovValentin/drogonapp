@@ -344,7 +344,7 @@ void mergePredictions(){
     int nodes_length = 24;
     //const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
     ofstream ofstr((saveLocation+ "function_prediction/predicted/predicted_all.txt").c_str());
-    for (int i = 0; i < 1; i++){
+    for (int i = 0; i < 16; i++){
         ifstream fin1;
         fin1.open((saveLocation+ "function_prediction/predicted/predicted_" + to_string(i) + ".txt").c_str());
         int runPrevT = 0;
@@ -354,8 +354,8 @@ void mergePredictions(){
             double prediction;
             vector<double> predictionNodes;
             fin1 >> run;
-            if (run == runPrevT)
-                write = false;
+            //if (run == runPrevT)
+            //    write = false;
             if (write)
                 ofstr << (int)run;
             for (size_t i = 0; i < nodes_length; i ++){
@@ -374,7 +374,7 @@ void mergePredictions(){
     ofstr.close();
 
     ofstr.open((saveLocation+ "function_prediction/predicted/predicted1_all.txt").c_str());
-    for (int i = 0; i < 1; i++){
+    for (int i = 0; i < 17; i++){
         ifstream fin1;
         fin1.open((saveLocation+ "function_prediction/predicted/predicted1_" + to_string(i) + ".txt").c_str());
         int runPrevT = 0;
@@ -384,8 +384,8 @@ void mergePredictions(){
             double prediction;
             vector<double> predictionNodes;
             fin1 >> run;
-            if (run == runPrevT)
-                write = false;
+            //if (run == runPrevT)
+            //    write = false;
             if (write)
                 ofstr << (int)run;
             for (size_t i = 0; i < nodes_length; i ++){
@@ -411,7 +411,7 @@ void drawTargetPredictionComparisonWithAsubplot(TGraphErrors* gr2, TGraphErrors*
     gStyle->SetOptStat(0);
 
     // Create a canvas
-    TCanvas *c = new TCanvas("c", "Histogram and Ratio", 1800, 800);
+    TCanvas *c = new TCanvas("c", "Histogram and Ratio", 1800, 1000);
 
     // Create pads for histograms and ratio
     TPad *pad1 = new TPad("pad1", "Main plot", 0.0, 0.3, 1.0, 1.0);
@@ -424,13 +424,47 @@ void drawTargetPredictionComparisonWithAsubplot(TGraphErrors* gr2, TGraphErrors*
     pad1->Draw();
     pad2->Draw();
 
+    // Set the x axis range of gr2 to match the division histogram
+    double xMin = hpredictedTarget->GetXaxis()->GetXmin();
+    double xMax = hpredictedTarget->GetXaxis()->GetXmax();
+    gr2->GetXaxis()->SetLimits(xMin, xMax);
+
+    gr2->GetYaxis()->SetTitle("Average ToT [a.u.]");
+    gr2->GetYaxis()->SetTitleSize(0.045);
+    gr2->GetYaxis()->SetTitleOffset(0.7);
+
+
+    // Calculate gr2 mean and std Y axis values and set the y axis range from mean-4std to mean+4std
+    double sumY = 0;
+    double sumY2 = 0;
+    int nPoints = gr2->GetN();
+    for (int i = 0; i < nPoints; i++){
+        double y;
+        gr2->GetPoint(i, xMin, y);
+        sumY += y;
+        sumY2 += y*y;
+    }
+    double meanY = sumY/nPoints;
+    double stdY = sqrt(sumY2/nPoints - meanY*meanY);
+    gr2->GetYaxis()->SetRangeUser(meanY - 3*stdY, meanY + 3*stdY);
+
+    // Set similarly for the 2d hpredictedTarget histogram y axis range mean-4std to mean+4std
+    hpredictedTarget->GetYaxis()->SetRangeUser(hpredictedTarget->GetMean(2) - 4*hpredictedTarget->GetStdDev(2), hpredictedTarget->GetMean(2) + 4*hpredictedTarget->GetStdDev(2));
+
+    gr2->SetMarkerSize(0.3);
+    grPT->SetMarkerSize(0.3);
+    grPTP->SetMarkerSize(0.35);
+
+    grPTP->SetMarkerStyle(24);
+
     // Draw histograms on the upper pad
     pad1->cd();
     gr2->Draw("AP");
     grPT->Draw("Psame");
     grPTP->Draw("Psame");
 
-    TLegend *legend = new TLegend(0.6, 0.7, 0.9, 0.9);
+    TLegend *legend = new TLegend(0.11, 0.69, 0.41, 0.89);
+    legend->SetBorderSize(0);
     legend->AddEntry(gr2, "Target with errors", "lpe");
     legend->AddEntry(grPT, "Predicted, train dataset", "lpe");
     legend->AddEntry(grPTP, "Predicted, test dataset", "lpe");
@@ -448,6 +482,7 @@ void drawTargetPredictionComparisonWithAsubplot(TGraphErrors* gr2, TGraphErrors*
     hpredictedTarget->GetYaxis()->SetLabelSize(0.08);
     hpredictedTarget->GetXaxis()->SetTitleSize(0.1);
     hpredictedTarget->GetXaxis()->SetLabelSize(0.08);
+
     hpredictedTarget->Draw();
 
     TF1* f1 = new TF1("f1","[0]+[1]*x",950,1500);
@@ -523,14 +558,29 @@ void drawTargetPressureOverpressure1(vector<double> totMp, vector<double> overp)
 }
 
 
+double averageRun(int run, vector< pair<int, int> > runBorders){
+    int nextTargetRun = 0;    // for the case with end run in a runList file
+    auto itEndRun = std::find_if(runBorders.begin(), runBorders.end(), [run](const std::pair<int, int>& p) { return p.first == run; });
+    if (itEndRun != runBorders.end()) {
+        nextTargetRun = itEndRun->second;
+    }
+    else {
+        nextTargetRun = run;
+    }
+    return (run + nextTargetRun) / 2.0;
+}
+
 void drawTargetPredictionComparison(){
-    int nodes_length = 24;
+    int baseTrainingNodes = 24;
+    int nodes_length = baseTrainingNodes;
     TFile* fileOut = new TFile("savedPlotsTemp1.root","RECREATE");
 
     setenv("TZ", "Europe/Berlin", 1);
     tzset();
 
     const char* timeFormat = "%d/%m %H:%M";
+
+    vector< pair<int,int> > runBorders = loadrunlistWithEnds(0, 1e11); //444140006
 
     //const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
     int chanTo = 5;
@@ -556,8 +606,8 @@ void drawTargetPredictionComparison(){
     ifstream fin2;
     TH1F* hdTarget1D = new TH1F("hdTarget1D","target1-target2;#errors;counts",1000,-100,100);
     //fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPrecise.dat").c_str());
-	//fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat").c_str());
-    fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets25beamTFull.dat");
+	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat").c_str());
+    //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets25beamTFull.dat");
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets24beamTFull.dat");
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOut.dat");
     std::map<int, vector< pair<double,double> > > targets;
@@ -572,8 +622,9 @@ void drawTargetPredictionComparison(){
         vector< pair<double, double> > targetNodesNormalized;
         double meanTarget, meanTargetErr;
         for (size_t i = 0; i < 24; i++){
-            fin2 >> run >> runEnd >> sector >> mod >> target >> targetErr;
-            //fin2 >> run >> sector >> mod >> target >> targetErr;
+            //fin2 >> run >> runEnd >> sector >> mod >> target >> targetErr;
+            fin2 >> run >> sector >> mod >> target >> targetErr;
+            run = averageRun(run, runBorders);
             if (predTargetNodes.size()>0){
                 //if (fabs(target - predTargetNodes[i].first) < predTargetNodes[i].second*5)
                 //    targetErr = fabs(target - predTargetNodes[i].first)/2.;
@@ -630,12 +681,12 @@ void drawTargetPredictionComparison(){
     for (size_t i = 0; i < runsTargets.size(); i++){
         //targets[runsTargets[i]] = valuesTargets[i];
         int n = gr2->GetN();
-        gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),targetsNormalized[runsTargets[i]][chanTo].first);
-        //gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),targets[runsTargets[i]][chanTo].first);
+        //gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),targetsNormalized[runsTargets[i]][chanTo].first);
+        gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),targets[runsTargets[i]][chanTo].first);
         //gr2->SetPoint(n,(double)(runToDateNumber(runsTargets[i])),valuesTargets[i]);
         //gr2->SetPoint(n,(double)(runsTargets[i]),valuesTargets[i]);
-        gr2->SetPointError(n, 0, targetsNormalized[runsTargets[i]][chanTo].second);
-        //gr2->SetPointError(n, 0, targets[runsTargets[i]][chanTo].second);
+        //gr2->SetPointError(n, 0, targetsNormalized[runsTargets[i]][chanTo].second);
+        gr2->SetPointError(n, 0, targets[runsTargets[i]][chanTo].second);
     }
     //downsampleGraphInPlace(gr2,0.1);
     gr2->SetMarkerStyle(21);
@@ -651,8 +702,8 @@ void drawTargetPredictionComparison(){
     //fin2.open((saveLocation + "info_tables/MDCModSecPrecise.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseExtended.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseCosmic25VaryHV.dat").c_str());
-    //fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb22ends9.dat").c_str());
-    fin2.open((saveLocation + "info_tables/MDCModSecPreciseApr25ends9.dat").c_str());
+    fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb22ends9.dat").c_str());
+    //fin2.open((saveLocation + "info_tables/MDCModSecPreciseApr25ends9.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb24ends9a.dat").c_str());
     std::map<int, vector< double > > mdcChanChamb0;
     cout << "a" << endl;
@@ -669,6 +720,7 @@ void drawTargetPredictionComparison(){
     while (!fin2.eof()){
         int run;
         fin2 >> run;
+        run = averageRun(run, runBorders);
         //run += 2*3600;
         vector<double> valuesChan1;
         double fillHist = -100;
@@ -725,7 +777,7 @@ void drawTargetPredictionComparison(){
     //gStyle->SetTimeOffset(0, "gmt"); 
     
     cout << "b" << endl;
-    nodes_length = 12;
+    nodes_length = baseTrainingNodes;
     fin2.close();
     TGraph* grMDCchan[channelNumber];
     TGraph* grMDCchan2;
@@ -762,7 +814,7 @@ void drawTargetPredictionComparison(){
     }
     fin1.close();
 
-    fin2.open((saveLocation+ "function_prediction/predicted/predicted1_0.txt").c_str());
+    fin2.open((saveLocation+ "function_prediction/predicted/predicted1_all.txt").c_str());
     std::map<int, vector< double > > predictionsTest;
     runPrevT = 0;
     while (!fin2.eof()){
@@ -798,6 +850,7 @@ void drawTargetPredictionComparison(){
             diffPredictedTarget.push_back( x.second[i] );
             diffPredictedTargetErr.push_back(0);
         }
+        //cout << x.first << endl;
         if (targets.find(x.first) == targets.end())
             continue;
         for (size_t i = chanTo; i < chanTo+1; i ++){
@@ -807,6 +860,7 @@ void drawTargetPredictionComparison(){
             h2dPredictionsVsTargetTrain->Fill(x.second[i],targets[x.first][i].first);
             //hpredictedTarget->Fill(runToDateNumber(x.first),(x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
             hpredictedTarget->Fill(runToDateNumber(x.first),(x.second[i]/targets[x.first][i].first));
+            cout << "Filling hpredictedTarget with: " << runToDateNumber(x.first) << ", " << (x.second[i]/targets[x.first][i].first) << endl;
             if (fabs((x.second[i] - targets[x.first][i].first)/targets[x.first][i].second ) < 10)
                 ppredictedTarget->Fill(runToDateNumber(x.first),(x.second[i] - targets[x.first][i].first)/targets[x.first][i].second );
             //hpredictedTarget1D->Fill((x.second[i] - targets[x.first][i].first)/stdValues[meanValues.size()-24*2+i] );
@@ -948,7 +1002,7 @@ void drawTargetPredictionComparison(){
     //hpredictedTarget1D->DrawNormalized("same",hdTarget1D->GetEntries());
     //hpredictedTarget1D->Draw();
     //gr2->GetYaxis()->SetRangeUser(0,100);
-    gr2->Draw("AP");
+    //gr2->Draw("AP");
     //grPT->Draw("Psame");
     //grPTP->Draw("Psame");
 
@@ -957,7 +1011,7 @@ void drawTargetPredictionComparison(){
     //gr2->GetXaxis()->SetLimits(runToDateNumber(runsTargets[1])-100000, runToDateNumber(445559647));
     //hpredictedTarget->GetXaxis()->SetLimits(gr2->GetX()[0]-100000, gr2->GetX()[runsPredictedTarget.size()-1]*1.3);
     
-    //drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
+    drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
 
     //drawTargetPressureOverpressure(grMDCchan2, grMDCchan[3]);
     //drawTargetPressureOverpressure1(valuesChans1, valuesChans2);
@@ -966,10 +1020,10 @@ void drawTargetPredictionComparison(){
     //canvas2->cd();
     //grMDCchan[3]->SetMarkerColor(5);
     //grMDCchan2->Draw("AP");
-    grMDCchan[0]->Draw("Psame");
+    //grMDCchan[0]->Draw("Psame");
     //grMDCchan[3]->Draw("AP");
-    grMDCchan[2]->Draw("Psame");
-    grMDCchan[3]->Draw("Psame");
+    //grMDCchan[2]->Draw("Psame");
+    //grMDCchan[3]->Draw("Psame");
     //grMDCchan[1]->Draw("Psame");
     //grMDCchan[1]->Draw("Psame");
     //grMDCchan[6]->Draw("Psame");
@@ -1001,7 +1055,7 @@ void drawTargetPredictionComparison(){
     latex.SetTextSize(0.04);
     int moduleLatex = chanTo/6;
     int sectorLatex = chanTo%6;
-    latex.DrawLatex(0.15, 0.85, Form("Module %d, Sector %d",moduleLatex,sectorLatex));
+    //latex.DrawLatex(0.15, 0.85, Form("Module %d, Sector %d",moduleLatex,sectorLatex));
     
     //TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
     canvas->Update();
@@ -1822,24 +1876,38 @@ void drawTargetPredictionComparisonCosmics(){
 void drawRunLengthDistribution(){
     //vector<int> runBorders = dateRunF::loadrunlist(0, 1e10); //444140006
     vector< pair<int,int> > runBorders = dateRunF::loadrunlistWithEnds(0, 1e10); 
-    TH1F* hRunLength = new TH1F("hRunLength","Run length distribution;run length [s];counts",1000,0,1000);
-    TH1F* hRunDiff = new TH1F("hRunDiff","Run distance distribution;run distance [s];counts",10000,0,10000);
+    TH1F* hRunLength = new TH1F("hRunLength",";Run duration [s];Runs count",1000,0,10000);
+    TH1F* hRunDiff = new TH1F("hRunDiff",";Run center distance [s];Runs count",1000,0,10000);
     for (size_t i = 0; i < runBorders.size()-2; i++){
         //hRunLength->Fill(runBorders[i+1]-runBorders[i]);
         hRunLength->Fill(runBorders[i].second-runBorders[i].first);
 
+        //int run1 = (int)((runBorders[i]));
+        //int run2 = (int)((runBorders[i+1]));
+
         int run1 = (int)((runBorders[i].second+runBorders[i].first)/2);
         int run2 = (int)((runBorders[i+1].second+runBorders[i+1].first)/2);
+        //int run1 = (int)((runBorders[i].second));
+        //int run2 = (int)((runBorders[i+1].first));
         hRunDiff->Fill(run2-run1);
     }
-    TCanvas* canvas = new TCanvas("canvas", "Run length distribution", 1720, 1250);
-    gStyle->SetOptStat(0);
-    hRunLength->SetLineColor(1);
-    hRunLength->SetLineWidth(2);
-    //hRunLength->Draw();
-    hRunDiff->SetLineColor(1);
-    hRunDiff->SetLineWidth(2);
-    hRunDiff->Draw();
+
+    hRunLength->GetXaxis()->SetTitleSize(0.045);
+    hRunLength->GetYaxis()->SetTitleSize(0.045);
+    hRunDiff->GetXaxis()->SetTitleSize(0.045);
+    hRunDiff->GetYaxis()->SetTitleSize(0.045);
+    hRunLength->GetXaxis()->SetTitleOffset(0.95);
+    hRunLength->GetYaxis()->SetTitleOffset(0.98);
+    hRunDiff->GetXaxis()->SetTitleOffset(0.95);
+    hRunDiff->GetYaxis()->SetTitleOffset(0.98);
+
+    hRunLength->GetYaxis()->SetMaxDigits(3);
+    hRunDiff->GetYaxis()->SetMaxDigits(3);
+
+    hRunLength->SetLineColor(1); hRunLength->SetFillStyle(3004); hRunLength->SetFillColor(4); hRunLength->SetLineWidth(2);
+    hRunDiff->SetLineColor(1); hRunDiff->SetFillStyle(3004); hRunDiff->SetFillColor(4); hRunDiff->SetLineWidth(2);
+
+
     //TLine *l1 = new TLine(30,0,30,hRunLength->GetMaximum()*1.1);
     //TLine *l2 = new TLine(200,0,200,hRunLength->GetMaximum()*1.1);
     TLine *l1 = new TLine(30,0,30,hRunDiff->GetMaximum()*1.1);
@@ -1848,10 +1916,44 @@ void drawRunLengthDistribution(){
     l2->SetLineColor(2);
     l1->SetLineWidth(2);
     l2->SetLineWidth(2);
+    hRunDiff->SetLineColor(1);
+    hRunDiff->SetLineWidth(2);
+    gStyle->SetOptStat(0);
+    hRunLength->SetLineColor(1);
+    hRunLength->SetLineWidth(2);
+    hRunLength->GetXaxis()->SetLimits(1, 10000);
+    hRunDiff->GetXaxis()->SetLimits(1, 10000);
     hRunLength->GetYaxis()->SetRangeUser(0.1, hRunLength->GetMaximum()*1.1);
     hRunDiff->GetYaxis()->SetRangeUser(0.1, hRunDiff->GetMaximum()*1.1);
+
+
+    TCanvas* canvas = new TCanvas("canvas", "Run length distribution", 2100, 1250);
+    canvas->Divide(2,1);
+    canvas->cd(1);
+    //hRunLength->Draw();
+    hRunDiff->Draw();
     //l1->Draw("same");
-    l2->Draw("same");
+    //l2->Draw("same");
+    TPad* pad1 = (TPad*)canvas->GetPad(1);
+    pad1->SetGridx();
+    //pad1->SetGridy();
+    pad1->SetLogx();
+    canvas->Update();
+
+    canvas->cd(2);
+    hRunLength->GetYaxis()->SetTitleOffset(1.04);
+    hRunDiff->GetYaxis()->SetTitleOffset(1.04);
+    //hRunLength->Draw();
+    hRunDiff->Draw();
+    //l1->Draw("same");
+    //l2->Draw("same");
+    TPad* pad2 = (TPad*)canvas->GetPad(2);
+    pad2->SetGridx();
+    //pad2->SetGridy();
+    pad2->SetLogy();
+    pad2->SetLogx();
+    
+
     canvas->Update();
 
     //canvas->SaveAs("/home/localadmin_jmesschendorp/Pictures/runLengthDistribution.png");

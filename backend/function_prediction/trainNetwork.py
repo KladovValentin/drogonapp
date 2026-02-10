@@ -20,7 +20,7 @@ from models.model import Conv2dLSTM
 from models.model import GCNLSTM
 from models.model import GraphTransformer2D
 from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset
-#from predict import predict_cicle
+from predict import predict_cicle
 
 
 """
@@ -32,23 +32,69 @@ If new model is being added:
 5) change config.py
 """
 
-mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/"
-dataManager = DataManager(mainPath)
-
 
 class CustomMSELoss(nn.Module):
     def __init__(self):
         super(CustomMSELoss, self).__init__()
 
     def forward(self, predictions, targets):
-        squared_errors = torch.pow(predictions - targets[:,0,:], 2)
-        clipped_sigmas = torch.where(targets[:,1,:] < 0.1, torch.ones_like(targets[:,1,:]), targets[:,1,:])
+        squared_errors = torch.pow(predictions - targets[:,:,0,:], 2)
+        clipped_sigmas = torch.where(targets[:,:,1,:] < 0.1, torch.ones_like(targets[:,:,1,:]), targets[:,:,1,:])
         normalized_errors = squared_errors / torch.pow(clipped_sigmas, 2)
         #normalized_errors = squared_errors / targets[:,:,1,:]
         #print(normalized_errors)
         loss = torch.mean(normalized_errors)
         #print(loss)
         return loss
+
+
+
+class EarlyStopperEMA:
+    def __init__(self, mode="min", patience=10, min_delta=0.0, beta=0.9, warmup=0):
+        assert mode in ("min", "max")
+        self.mode = mode
+        self.patience = patience
+        self.min_delta = float(min_delta)
+        self.beta = float(beta)
+        self.warmup = int(warmup)
+
+        self.counter = 0
+        self.t = 0
+
+        self.best = np.inf if mode == "min" else -np.inf
+        self.ema = None
+        self.best_ema = np.inf if mode == "min" else -np.inf
+
+    def _improved(self, current, best):
+        if self.mode == "min":
+            return current <= best - self.min_delta
+        else:
+            return current >= best + self.min_delta
+
+    def step(self, val):
+        self.t += 1
+        val = float(val)
+
+        self.ema = val if self.ema is None else (self.beta * self.ema + (1 - self.beta) * val)
+
+        # Optional: don't early-stop during warmup or until EMA stabilizes
+        if self.t <= self.warmup:
+            # still keep bests updated
+            if (self.mode == "min" and val < self.best) or (self.mode == "max" and val > self.best):
+                self.best = val
+            if (self.mode == "min" and self.ema < self.best_ema) or (self.mode == "max" and self.ema > self.best_ema):
+                self.best_ema = self.ema
+            return False
+
+        if self._improved(self.ema, self.best_ema):
+            self.best_ema = self.ema
+            self.counter = 0
+        else:
+            self.counter += 1
+
+        return self.counter >= self.patience
+
+
 
 class EarlyStopper:
     def __init__(self, minmax, patience=10, min_delta=0.0):
@@ -79,8 +125,10 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
     train_history = []
     validLoss_history = []
     early_stopper = EarlyStopper(1)
+    early_stopperEMA = EarlyStopperEMA()
     #xt0 = torch.tensor()
     #xv0 = torch.tensor()
+    ts = 10
 
     for epoch in range(num_epochs):
         model.train()
@@ -119,9 +167,9 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
             #running_loss = loss(prediction0[:,-1,:], y[:,-1,0,:])
 
             if getattr(loss, "loss_type", None) == "nnMSE":
-                running_loss = loss(prediction[:,-1,:], y[:,-1,0,:])
+                running_loss = loss(prediction[:,-ts:,:], y[:,-ts:,0,:])
             elif getattr(loss, "loss_type", None) == "customMSE":
-                running_loss = loss(prediction[:,-1,:], y[:,-1,:,:])
+                running_loss = loss(prediction[:,-ts:,:], y[:,-ts:,:,:])
             running_loss.backward()
             optimizer.step()
 
@@ -138,7 +186,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
             fulfulYAmount+=fullYAmount
             std = yAccTest.std(dim=0, unbiased=False).mean()
             #std = y[:,-1,1,:]*2
-            running_acc = torch.sum( ((prediction[:,-1,:]-yAccTest)>-std) & ((prediction[:,-1,:]-yAccTest)<std) )
+            running_acc = torch.sum( ((prediction[:,-1,:]-yAccTest)>-std/3) & ((prediction[:,-1,:]-yAccTest)<std/3) )
             #running_acc = torch.sum( ((prediction-yAccTest)>-0.3) & ((prediction-yAccTest)<0.3) )
             #print(running_acc)
             accuracy_train += running_acc
@@ -168,9 +216,9 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
                 #validLosses.append(float(loss(prediction1, yval[:,:,0,:])))
                 #validLosses.append(float(loss(prediction1[:,-1,:], yval[:,-1,0,:])))
                 if getattr(loss, "loss_type", None) == "nnMSE":
-                    validLosses.append(float(loss(prediction1[:,-1,:], yval[:,-1,0,:])))
+                    validLosses.append(float(loss(prediction1[:,-ts:,:], yval[:,-ts:,0,:])))
                 if getattr(loss, "loss_type", None) == "customMSE":
-                    validLosses.append(float(loss(prediction1[:,-1,:], yval[:,-1,:,:])))
+                    validLosses.append(float(loss(prediction1[:,-ts:,:], yval[:,-ts:,:,:])))
 
                 yAccTest = yval[:,-1,0,:]
                 #yAccTest = yval[:,0,:]
@@ -181,7 +229,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
                 fulfulYAmount+=fullYAmount
                 std = yAccTest.std(dim=0, unbiased=False).mean()
                 #std = yval[:,-1,1,:]*2
-                validAccuracies.append(torch.sum( ((prediction1[:,-1,:]-yAccTest)>-std) & ((prediction1[:,-1,:]-yAccTest)<std) ))
+                validAccuracies.append(torch.sum( ((prediction1[:,-1,:]-yAccTest)>-std/3) & ((prediction1[:,-1,:]-yAccTest)<std/3) ))
                 #print(validAccuracies[-1])
 
             loss_valid = np.mean(np.array(validLosses))
@@ -213,15 +261,17 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
         #    print(xt0,xv0)
         print("Average loss: %f, valid loss: %f, Train accuracy: %f, V acc: %f, epoch: %f" % (loss_train, loss_valid, accuracy_train*100, accuracy_valid*100, epoch+1))
 
-        #if (epoch > 50):
-        #    if (early_stopper.early_stop(loss_valid*100)):
-        #        break
+        if (epoch > 10):
+            #if (early_stopper.early_stop(loss_valid*100)):
+            if (early_stopperEMA.step(loss_valid*100)):
+                break
     
     return accuracy_valid
 
 def reset_weights(m):
     if isinstance(m, nn.Linear):
         m.reset_parameters()
+
 
 def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
     from config import Config
@@ -241,23 +291,23 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         batch_size, lr, nNeurons, nLayers, weight_decay = varyHyperparameters()
         print(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay))
         
+        #batch_size = 64 #50000 #512
         batch_size = 32 #50000 #512
-        #batch_size = 32 #50000 #512
-        weight_decay = 0.0000
-        lr = 0.0005
+        weight_decay = 0.0001
+        lr = 0.005
         epochs = 100
         if (transferTraining):
             #lr = 0.02
-            lr = 0.1
+            lr = 0.01
             if (ind == 0):
                 epochs = 100  #cosmic
             #epochs = 40  #new beam time
-            if (ind == 1):
-                epochs = 60  #going back from cosmic
+            if (ind >= 1):
+                epochs = 10  #going back from cosmic
                 lr = lr*0.1
             #weight_decay = 0.0005
-            #weight_decay = 0.0001
-            weight_decay = 0.0
+            weight_decay = 0.0001
+            #weight_decay = 0.0
         nLayers = 1
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
@@ -265,14 +315,18 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         fullset = dataManager.normalizeDatasetScale(fullset)
         #fullset.drop(list(fullset.columns)[0],axis=1,inplace=True) #drop indices
         print(fullset)
-        #dftCorr = fullset.sample(frac=1.0).reset_index(drop=True) # shuffling
+        #dftCorr = fullset.sample(frac=1).reset_index(drop=True) # shuffling
         dftCorr = fullset.reset_index(drop=True)
         #print(dftCorr)
         #if transferTraining:
         #dataTable = dftCorr#.sort_index()
         #validTable = dataTable.copy()
         #else:
-        
+
+        validShuffled = True
+
+        xf, yf, e_i, e_a = load_dataset(config,dftCorr.copy())
+
         if (transferTraining):
             dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*1.0)].copy()
         else:
@@ -281,17 +335,26 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
 
         
         if (config.modelType == "gConvLSTM"):
-            xt, yt, e_i, e_a = load_dataset(config,dataTable)
+            if (not validShuffled):
+                xt, yt, e_i, e_a = load_dataset(config,dataTable)   #when split is consequent
+                xv, yv, _, _ = load_dataset(config,validTable)      #when split is consequent
+                shuffled_indicest = np.random.permutation(xt.shape[0])
+                shuffled_indicest1 = np.random.permutation(xv.shape[0])
+                #print(shuffled_indicest)
+                xt = xt[shuffled_indicest]
+                yt = yt[shuffled_indicest]
+                xv = xv[shuffled_indicest1]
+                yv = yv[shuffled_indicest1]
+
+            elif (validShuffled):
+                shuffled_indicesf = np.random.permutation(xf.shape[0])
+                xt = xf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
+                yt = yf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
+                xv = xf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
+                yv = yf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
             #if (ind == -1):
             #    xt[:,:,1,:] = 1.750 + np.random.normal(0,0.05)  # set HV for constant to not affect the experimental training
-            xv, yv, _, _ = load_dataset(config,validTable)
-            shuffled_indicest = np.random.permutation(xt.shape[0])
-            shuffled_indicest1 = np.random.permutation(xv.shape[0])
-            #print(shuffled_indicest)
-            xt = xt[shuffled_indicest]
-            yt = yt[shuffled_indicest]
-            xv = xv[shuffled_indicest1]
-            yv = yv[shuffled_indicest1]
+            
             train_dataset = My_dataset((xt,yt))
             valid_dataset = My_dataset((xv,yv))
         else:
@@ -320,8 +383,8 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(5,5), num_layers=1, bias=0, output_size=1) #16 16
         elif (config.modelType == "gConvLSTM"):
             #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=16, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-            #nn_model = GCNLSTM(input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-            nn_model = GraphTransformer2D(input_size = input_dim[-2], embedding_size=8, num_nodes = input_dim[-1], sentence_length = input_dim[-3], e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
+            nn_model = GCNLSTM(input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
+            #nn_model = GraphTransformer2D(input_size = input_dim[-2], embedding_size=8, num_nodes = input_dim[-1], sentence_length = input_dim[-3], e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
             
 
             n_nodes = input_dim[-1]
@@ -359,6 +422,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
                     #if "input_normalizer" in name or "scale_shift" in name or "linear" in name:                               #exp hv inference from cosmic
                     if "input_normalizer" in name or "scale_shift" in name:
                         trainable = True
+                trainable = True
                 #if "input_normalizer" in name or "scale_shift" in name or "nn_model2." in name:
                 if (trainable):
                     param.requires_grad = True
@@ -380,7 +444,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             loss.loss_type = "customMSE"
 
         #optimizer = optim.SGD(nn_model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.05)
-        optimizer = optim.Adam(nn_model.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=weight_decay)
+        optimizer = optim.AdamW(nn_model.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=weight_decay)
 
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.75)
         #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
@@ -405,11 +469,11 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             #e_i_r = torch.randint(0,n_nodes-1,(1,edge_length,2))
             #e_a_r = torch.ones(1,edge_length)
             modelRandInput = (torch.randn(1, sent_length, in_channels, n_nodes))
-        torch.onnx.export(nn_model,                                # model being run
-                  modelRandInput,    # model input (or a tuple for multiple inputs)
-                  mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)
-                  input_names = ["input"],              # the model's input names
-                  output_names = ["output"], opset_version=11)            # the model's output names
+        #torch.onnx.export(nn_model,                                # model being run
+        #          modelRandInput,    # model input (or a tuple for multiple inputs)
+        #          mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)
+        #          input_names = ["input"],              # the model's input names
+        #          output_names = ["output"], opset_version=11)            # the model's output names
     
     f.close()
     #nn_model.eval()
@@ -430,28 +494,35 @@ def varyHyperparameters():
 
 print("start_train_python")
 
-dataManager.manageDataset("train_nn",0)
-#dataManager.manageDataset("test_nn",0)
 
-#dataManager.manageDataset("test_nn",0)
-train_NN(0,False,mainPath)
-#train_NN(0,True,mainPath)
+if __name__ == "__main__":
+    mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
+    dataManager = DataManager(mainPath)
 
+    dataManager.manageDataset("train_nn",0)
+    #dataManager.manageDataset("test_nn",0)
 
-#dataManager.manageDatasetCosmics("train_nn",0)
-#dataManager.manageDatasetCosmics("test_nn",0)
-
-#train_NN(0,True,mainPath,"simuCosmic.parquet")
-#train_NN(0,False,mainPath,"simuCosmic.parquet")
-
-#dataManager.manageDataset("test_nn",0)
-#predict_cicle(0)
+    #dataManager.manageDataset("test_nn",0)
+    train_NN(0,False,mainPath)
+    #train_NN(0,True,mainPath)
 
 
-#for i in range(20):
-#    train_NN(i+1,True,mainPath)
-#    predict_cicle(i+1)
+    #dataManager.manageDatasetCosmics("train_nn",0)
+    #dataManager.manageDatasetCosmics("test_nn",0)
 
-# back to beam time with fixed hv_mlp and nn_model
-#dataManager.manageDataset("train_nn",0)
-#train_NN(1,True,mainPath)
+    #train_NN(0,True,mainPath,"simuCosmic.parquet")
+    #train_NN(0,False,mainPath,"simuCosmic.parquet")
+
+    dataManager.manageDataset("test_nn",0)
+    predict_cicle(0)
+
+
+    for i in range(20):
+        dataManager.manageDataset("test_nn",i+1)
+        #train_NN(i+1,True,mainPath)
+        train_NN(i+1,False,mainPath)
+        predict_cicle(i+1)
+
+    # back to beam time with fixed hv_mlp and nn_model
+    #dataManager.manageDataset("train_nn",0)
+    #train_NN(1,True,mainPath)
