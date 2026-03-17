@@ -341,7 +341,7 @@ void drawTimeConsumptions(){
 
 
 void mergePredictions(){
-    int nodes_length = 24;
+    int nodes_length = 12;
     //const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
     ofstream ofstr((saveLocation+ "function_prediction/predicted/predicted_all.txt").c_str());
     for (int i = 0; i < 16; i++){
@@ -571,7 +571,7 @@ double averageRun(int run, vector< pair<int, int> > runBorders){
 }
 
 void drawTargetPredictionComparison(){
-    int baseTrainingNodes = 24;
+    int baseTrainingNodes = 12;
     int nodes_length = baseTrainingNodes;
     TFile* fileOut = new TFile("savedPlotsTemp1.root","RECREATE");
 
@@ -583,7 +583,7 @@ void drawTargetPredictionComparison(){
     vector< pair<int,int> > runBorders = loadrunlistWithEnds(0, 1e11); //444140006
 
     //const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
-    int chanTo = 5;
+    int chanTo = 7;
     /// Reading mean and std
     ifstream fin1;
     vector<double> meanValues, stdValues;
@@ -606,9 +606,9 @@ void drawTargetPredictionComparison(){
     ifstream fin2;
     TH1F* hdTarget1D = new TH1F("hdTarget1D","target1-target2;#errors;counts",1000,-100,100);
     //fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPrecise.dat").c_str());
-	fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat").c_str());
+	//  fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat").c_str());
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets25beamTFull.dat");
-    //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets24beamTFull.dat");
+    fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets24beamTFull1.dat");
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOut.dat");
     std::map<int, vector< pair<double,double> > > targets;
     std::map<int, vector< pair<double,double> > > targetsNormalized;
@@ -622,8 +622,8 @@ void drawTargetPredictionComparison(){
         vector< pair<double, double> > targetNodesNormalized;
         double meanTarget, meanTargetErr;
         for (size_t i = 0; i < 24; i++){
-            //fin2 >> run >> runEnd >> sector >> mod >> target >> targetErr;
-            fin2 >> run >> sector >> mod >> target >> targetErr;
+            fin2 >> run >> runEnd >> sector >> mod >> target >> targetErr;
+            //fin2 >> run >> sector >> mod >> target >> targetErr;
             run = averageRun(run, runBorders);
             if (predTargetNodes.size()>0){
                 //if (fabs(target - predTargetNodes[i].first) < predTargetNodes[i].second*5)
@@ -641,7 +641,8 @@ void drawTargetPredictionComparison(){
             double targetNormalized = (target-meanValues[meanValues.size()-24*2+i])/stdValues[meanValues.size()-24*2+i];
             double targetErrNormalized = targetErr/stdValues[meanValues.size()-24*2+i];
 
-            if (i == chanTo && run < 11445503850){
+            //if (i == chanTo && run < 11445503850){
+            if (i == chanTo){
                 runsTargets.push_back(run);
                 valuesTargetsNormalized.push_back(targetNormalized);
                 valuesTargets.push_back(target);
@@ -702,9 +703,9 @@ void drawTargetPredictionComparison(){
     //fin2.open((saveLocation + "info_tables/MDCModSecPrecise.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseExtended.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseCosmic25VaryHV.dat").c_str());
-    fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb22ends9.dat").c_str());
+    //fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb22ends9.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseApr25ends9.dat").c_str());
-    //fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb24ends9a.dat").c_str());
+    fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb24ends9a.dat").c_str());
     std::map<int, vector< double > > mdcChanChamb0;
     cout << "a" << endl;
     const int channelNumber = 9;
@@ -837,8 +838,8 @@ void drawTargetPredictionComparison(){
     /// _____ making graphErrors for prediction-target
     vector<double> runsPredictedTarget, diffPredictedTarget, runsPredictedTargetErr, diffPredictedTargetErr;
     vector<double> diffPredictedTargetDiff;
-    //TH2F* hpredictedTarget = new TH2F("hpredictedTarget","(predicted-target)/targetErr;run;(P-T)/T_{err} [#sigma]",10000,runToDateNumber(runsTargets[1])-100000,runToDateNumber(runsTargets[runsTargets.size()-1])+100000, 1000, 0.8, 1.2);
-    TH2F* hpredictedTarget = new TH2F("hpredictedTarget","(predicted-target)/targetErr;run;(P-T)/T_{err} [#sigma]",10000,runToDateNumber(runsTargets[1])-100000,runToDateNumber(445559647), 1000, 0.8, 1.2);
+    TH2F* hpredictedTarget = new TH2F("hpredictedTarget","(predicted-target)/targetErr;run;(P-T)/T_{err} [#sigma]",10000,runToDateNumber(runsTargets[1])-100000,runToDateNumber(runsTargets[runsTargets.size()-1])+100000, 1000, 0.8, 1.2);
+    //TH2F* hpredictedTarget = new TH2F("hpredictedTarget","(predicted-target)/targetErr;run;(P-T)/T_{err} [#sigma]",10000,runToDateNumber(runsTargets[1])-100000,runToDateNumber(445559647), 1000, 0.8, 1.2);
     TProfile* ppredictedTarget = new TProfile("ppredictedTarget","(predicted-target)/targetErr average;run;(P-T)/T_{err} [#sigma]",1000,runToDateNumber(443654673),runToDateNumber(446359647));
     TH1F* hpredictedTarget1D = new TH1F("hpredictedTarget1D","predicted-target;#std;counts",100,-10,10);
     TH2F* h2dPredictionsVsTargetTrain = new TH2F("h2dPredictionsVsTargetTrain","Predictions Vs Target training; prediction; target",1000,0,100,1000,0,100);
@@ -1020,8 +1021,8 @@ void drawTargetPredictionComparison(){
     //canvas2->cd();
     //grMDCchan[3]->SetMarkerColor(5);
     //grMDCchan2->Draw("AP");
-    //grMDCchan[0]->Draw("Psame");
     //grMDCchan[3]->Draw("AP");
+    //grMDCchan[0]->Draw("AP");
     //grMDCchan[2]->Draw("Psame");
     //grMDCchan[3]->Draw("Psame");
     //grMDCchan[1]->Draw("Psame");
@@ -1818,7 +1819,7 @@ void drawTargetPredictionComparisonCosmics(){
     //gr2->GetXaxis()->SetLimits(runToDateNumber(runsTargets[1])-100000, runToDateNumber(445559647));
     //hpredictedTarget->GetXaxis()->SetLimits(gr2->GetX()[0]-100000, gr2->GetX()[runsPredictedTarget.size()-1]*1.3);
     
-    //drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
+    drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
 
     //TCanvas* canvas2 = new TCanvas("canvas2", "Prediction vs Target calibration comparison", 1920, 950);
     //canvas2->cd();
@@ -1828,7 +1829,7 @@ void drawTargetPredictionComparisonCosmics(){
     //grMDCchan[0]->Draw("Psame");
     //grMDCchan[0]->Draw("Psame");
     //grMDCchan[1]->Draw("AP");
-    grMDCchan[1]->Draw("Psame");
+    //grMDCchan[1]->Draw("Psame");
     //grMDCchan[6]->Draw("Psame");
     //grMDCchan[3]->Draw("Psame");
 

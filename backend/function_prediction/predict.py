@@ -90,7 +90,7 @@ def checkDistributions():
 
 def getHV(model,X):
     model.eval()
-    nodes_length = 24
+    nodes_length = X.shape[-1]
     # Example input X with features in each node (batch_size, num_nodes, feature_dim)
 
     feature_index = 1  # The specific feature in the node you want to modify

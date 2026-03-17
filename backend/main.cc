@@ -73,8 +73,8 @@ int main(int argc, char** argv) {
 
     /// Ideally, change to normal class object. Initialize normally once, and forward a copy to the child drogon process.
     /// It only needs to save the data via serverdata copy. And the main copy of the controllerBase in the parent process will read the data from file regulary
-    std::shared_ptr<ControllerBase> controllerBase = std::make_shared<ControllerBase>();
-    ServiceLocator::initialize(controllerBase);
+    //std::shared_ptr<ControllerBase> controllerBase = std::make_shared<ControllerBase>();
+    //ServiceLocator::initialize(controllerBase);
 
     //controllerBase->compareTargetPredictionFromTraining();
     //epicsManager->makeTableWithEpicsData("new", 443670000, 1e9);
@@ -97,7 +97,9 @@ int main(int argc, char** argv) {
     //controllerBase->epicsManager->makeTableWithEpicsDataExtended("app", 444247969, 1e9,"MDCModSecPreciseExtended");
     //controllerBase->epicsManager->makeTableWithEpicsDataContinuousSplit("new", 540497587, 540545583,"MDCModSecPreciseCosmic25VaryHV1");
     //controllerBase->epicsManager->makeTableWithEpicsDataContinuousSplit("new",  0, 1e10,"MDCModSecPreciseCosmic25_106VaryHVendsMinutes9");
-    controllerBase->neuralNetwork->remakeInputDataset(false);
+    NeuralNetwork* neuralNetwork = new NeuralNetwork();
+    neuralNetwork->remakeInputDataset(false);
+    //controllerBase->neuralNetwork->remakeInputDataset(false);
 
     
     //saveRunNumbers("/home/localadmin_jmesschendorp/lustre/hades/raw/apr25/25/");

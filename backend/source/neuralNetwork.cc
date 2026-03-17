@@ -698,7 +698,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative4.dat");     //10 minutes last
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative3.dat");   //30 minutes last
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative100_2properPars.dat");   //56 full runs last 16 05
-    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets24beamTFull.dat");   //2025 targets 
+    vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets24beamTFull1.dat");   //2025 targets 
     
 
     //vector< pair< int, vector<double> > > tableClbModSec = readClbTableFromFile("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative100_2properPars.dat");   //106 full runs last 16 05
@@ -755,7 +755,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
         //ofNN.open(saveLocation+"nn_input/outNNFitTargetRunEnds9pars.dat"); //Test1
         //ofNN.open(saveLocation+"nn_input/outNNFitTargetCosmic25_10mins.dat"); //cosmic 10 minutes
         //ofNN.open(saveLocation+"nn_input/outNNFitTargetCosmic25_106_9a.dat"); //cosmic 30 minutes
-        ofNN.open(saveLocation+"nn_input/outNNFitTargetBeam24_9.dat"); 
+        ofNN.open(saveLocation+"nn_input/outNNFitTargetBeam24_9a.dat"); 
         //ofNN.open(saveLocation+"nn_input/outNNFitTargetBeam25_9.dat"); //cosmic 30 minutes
         for (auto entry: meanToTModSec){
             int run = entry.first;
@@ -771,6 +771,7 @@ int NeuralNetwork::remakeInputDataset(bool draw){
             }
             //if (tooBadValues)
             //    continue;
+            cout << "before finding run " << run << endl;
 
             //cout << "a  ";
             if (p != dbPars[0].end()){

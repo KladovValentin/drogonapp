@@ -51,7 +51,7 @@ class Graph_dataset(torch.utils.data.Dataset):
 # --- Graph Creation ---
 
 def make_graph(config):
-    cells_length = 24
+    cells_length = 12
     edges = []
 
     for i in range(cells_length):
@@ -69,7 +69,7 @@ def make_graph(config):
 
 def load_dataset(config, df):
     # transform to numpy, assign types, split on features-labels
-    cellsLengthToUse = 24
+    cellsLengthToUse = 12
     sentenceLength, cellsLength, channelsLength = config.sentenceLength, config.cellsLength, config.channelsLength
     dfn = df.to_numpy()
 
@@ -426,16 +426,17 @@ class DataManager():
 
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNTestSMzxc.dat")
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTarget.dat")      # main that was used before cosmic tries
-        dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetRunEnds9pars.dat")      # new with 9 pars and run ends, doesn't work well?
+        #    dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetRunEnds9pars.dat")      # new with 9 pars and run ends, doesn't work well?
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetBeam25_9.dat")      # new with 9 pars and run ends, doesn't work well?
-        #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetBeam24_9.dat")      # new with 9 pars and run ends, doesn't work well?
+        dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetBeam24_9a.dat")      # new with 9 pars and run ends, doesn't work well?
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25.dat")     # for cosmics
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetExtended.dat")
         #print(dftCorr)
         
 
-        baseTrainRange = int(dftCorr.shape[0]*0.2)
-        leftRange = int((dftCorr.shape[0] - baseTrainRange)/30)
+        baseTrainRange = int(dftCorr.shape[0]*0.8)
+        #leftRange = int((dftCorr.shape[0] - baseTrainRange)/30)
+        leftRange = int((dftCorr.shape[0] - baseTrainRange))
         retrainIndex = ind
         retrain0 = baseTrainRange + leftRange*(retrainIndex-5)
         #retrain0 = max(max(baseTrainRange + 200*(int(retrainIndex/2)-4), baseTrainRange + 100*(int(retrainIndex)-10)), int(baseTrainRange/20))
@@ -447,8 +448,8 @@ class DataManager():
             #dftTV = dftCorr.iloc[int(dftCorr.shape[0]*0.2):baseTrainRange].copy()
             dftTV = dftCorr.iloc[:retrain1].copy()
         else:
-            dftTV = dftCorr.iloc[retrain0:retrain1].copy()
-            #dftTV = dftCorr.iloc[:retrain1].copy()
+            #dftTV = dftCorr.iloc[retrain0:retrain1].copy()
+            dftTV = dftCorr.iloc[:retrain1].copy()
         dftTrainV = dftTV.copy()
         dftTest = dftCorr.iloc[retrain1:retrain2].copy()
 

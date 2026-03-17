@@ -128,7 +128,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
     early_stopperEMA = EarlyStopperEMA()
     #xt0 = torch.tensor()
     #xv0 = torch.tensor()
-    ts = 10
+    ts = 5
 
     for epoch in range(num_epochs):
         model.train()
@@ -291,8 +291,8 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         batch_size, lr, nNeurons, nLayers, weight_decay = varyHyperparameters()
         print(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay))
         
-        #batch_size = 64 #50000 #512
-        batch_size = 32 #50000 #512
+        batch_size = 64 #50000 #512
+        #batch_size = 32 #50000 #512
         weight_decay = 0.0001
         lr = 0.005
         epochs = 100
@@ -303,7 +303,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
                 epochs = 100  #cosmic
             #epochs = 40  #new beam time
             if (ind >= 1):
-                epochs = 10  #going back from cosmic
+                epochs = 20  #going back from cosmic
                 lr = lr*0.1
             #weight_decay = 0.0005
             weight_decay = 0.0001
@@ -499,11 +499,11 @@ if __name__ == "__main__":
     mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
     dataManager = DataManager(mainPath)
 
-    dataManager.manageDataset("train_nn",0)
+    #dataManager.manageDataset("train_nn",0)
     #dataManager.manageDataset("test_nn",0)
 
     #dataManager.manageDataset("test_nn",0)
-    train_NN(0,False,mainPath)
+    #train_NN(0,False,mainPath)
     #train_NN(0,True,mainPath)
 
 
@@ -513,15 +513,15 @@ if __name__ == "__main__":
     #train_NN(0,True,mainPath,"simuCosmic.parquet")
     #train_NN(0,False,mainPath,"simuCosmic.parquet")
 
-    dataManager.manageDataset("test_nn",0)
+    #dataManager.manageDataset("test_nn",0)
     predict_cicle(0)
 
 
-    for i in range(20):
-        dataManager.manageDataset("test_nn",i+1)
+    #for i in range(20):
+    #    dataManager.manageDataset("test_nn",i+1)
         #train_NN(i+1,True,mainPath)
-        train_NN(i+1,False,mainPath)
-        predict_cicle(i+1)
+    #    train_NN(i+1,False,mainPath)
+    #    predict_cicle(i+1)
 
     # back to beam time with fixed hv_mlp and nn_model
     #dataManager.manageDataset("train_nn",0)
