@@ -1,4 +1,5 @@
 import sys
+import pickle
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,6 +12,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 from models.model import Conv2dLSTM
+from models.model import BoostedTreesRegressor
 from models.model import GCNLSTM
 from models.model import GraphTransformer2D
 from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset, readTrainData, compute_scaling_factor
@@ -42,6 +44,10 @@ def loadModel(config, input_dim, nClasses, path, e_i=0,e_a=0):
         nn_model = GCNLSTM(input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
         #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
         #nn_model = GraphTransformer2D(input_size = input_dim[-2], embedding_size=8, num_nodes = input_dim[-1], sentence_length = input_dim[-3], e_i=e_i, e_a=e_a)
+    elif (config.modelType == "BoostedTrees"):
+        with open(path+"tempModelBoosted.pkl", "rb") as model_file:
+            nn_model = pickle.load(model_file)
+        return nn_model
     nn_model.type(torch.FloatTensor)
     nn_model.load_state_dict(torch.load(path+"tempModelT.pt"))
     nn_model.eval()
@@ -170,9 +176,13 @@ def makePredicionList(config, dataManager, experiment_path, savePath, path):
     #load nn and predict
     if (config.modelType == "gConvLSTM"):
         nn_model = loadModel(config, input_dim, nClasses, path, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
+    elif (config.modelType == "BoostedTrees"):
+        nn_model = loadModel(config, input_dim, nClasses, path)
     #else:
     #nn_model = loadModel(config, input_dim, nClasses, path)
-    nn_model.eval()
+    nn_model_eval = getattr(nn_model, "eval", None)
+    if callable(nn_model_eval):
+        nn_model_eval()
 
 
     # Register the hook on the whole nn_model block
@@ -209,6 +219,13 @@ def makePredicionList(config, dataManager, experiment_path, savePath, path):
                 #predictionWithHV[:,i] = predictionWithHV[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
                 predictedHV[:,i] = predictedHV[:,i]*compute_scaling_factor(mean[1*n_nodes+i])
             #print(prediction)
+        elif(config.modelType == "BoostedTrees"):
+            prediction = nn_model.predict(x.detach().cpu().numpy())
+            predictedHV = np.zeros_like(prediction)
+            predictionWithHV = torch.from_numpy(prediction.copy())
+            n_nodes = config.cellsLength
+            for i in range(prediction.shape[1]):
+                prediction[:,i] = prediction[:,i]*std[-24*2+i] + mean[-24*2+i]
         dat_list.append(pandas.DataFrame(prediction))
         hv_list.append(pandas.DataFrame(predictedHV))
         stable_dat_list.append(pandas.DataFrame(predictionWithHV.detach().cpu().numpy()))
@@ -671,18 +688,18 @@ if __name__ == "__main__":
 
     #print("start python predict")
     test = 0
-    #predict_nn("tesu",'predicted1_'+str(test), path)
-    #predict_nn("simu",'predicted_'+str(test), path)
+    predict_nn("tesu",'predicted1_'+str(test), path)
+    predict_nn("simu",'predicted_'+str(test), path)
 
-    #analyseOutput(path+"predicted/predicted_"+str(test),path+"simu", path+"predicted/predicted1_"+str(test),path+"tesu")
+    analyseOutput(path+"predicted/predicted_"+str(test),path+"simu", path+"predicted/predicted1_"+str(test),path+"tesu")
 
     #analyseOutput(path+"predictedSim.parquet",path+"simu.parquet")
 
 
-    predict_nn("tesuCosmic",'predictedCosmics1_', path)
-    predict_nn("simuCosmic",'predictedCosmics_', path)
+    #predict_nn("tesuCosmic",'predictedCosmics1_', path)
+    #predict_nn("simuCosmic",'predictedCosmics_', path)
 
-    analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
+    #analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
 
     #analyseOutput(path+"predictedCosmics.parquet",path+"simu.parquet")
 

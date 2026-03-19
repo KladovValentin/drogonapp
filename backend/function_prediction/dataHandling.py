@@ -107,7 +107,7 @@ def load_dataset(config, df):
         x = (np.array(x).astype(np.float32))[...,np.newaxis]
         y = np.array(y).astype(np.float32)
 
-    if (config.modelType == "gConvLSTM"):
+    if (config.modelType == "gConvLSTM" or config.modelType == "BoostedTrees"):
         dfnRun = dfn[:,0]
         dfnX = dfn[:,1:-2*cellsLength]
         dfnY = dfn[:,-2*cellsLength:]
@@ -191,7 +191,7 @@ def load_dataset(config, df):
     #shape: batch, sentence, in_channels, nodes
     print('x shape = ' + str(x.shape))
     print('y shape = ' + str(y.shape))
-    if (config.modelType == "gConvLSTM"):
+    if (config.modelType == "gConvLSTM" or config.modelType == "BoostedTrees"):
         print('e_ind shape = ' + str(e_ind2.shape))
         print('e_att shape = ' + str(e_att2.shape))
         print(torch.LongTensor(e_ind2).movedim(-2,-1))
@@ -426,9 +426,9 @@ class DataManager():
 
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNTestSMzxc.dat")
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTarget.dat")      # main that was used before cosmic tries
-        #    dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetRunEnds9pars.dat")      # new with 9 pars and run ends, doesn't work well?
+        dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetRunEnds9pars.dat")      # new with 9 pars and run ends, doesn't work well?
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetBeam25_9.dat")      # new with 9 pars and run ends, doesn't work well?
-        dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetBeam24_9a.dat")      # new with 9 pars and run ends, doesn't work well?
+        #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetBeam24_9a.dat")      # new with 9 pars and run ends, doesn't work well?
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25.dat")     # for cosmics
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTargetExtended.dat")
         #print(dftCorr)
@@ -553,4 +553,3 @@ def readTrainData(path, mod):
     mean = np.loadtxt(f"{path}/meanValuesT{mod}.txt")
     std = np.loadtxt(f"{path}/stdValuesT{mod}.txt")
     return mean, std
-

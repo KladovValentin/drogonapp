@@ -1,5 +1,6 @@
 
 import sys
+import pickle
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,6 +18,7 @@ from tqdm.auto import tqdm
 from tqdm import trange
 from pympler import asizeof
 from models.model import Conv2dLSTM
+from models.model import BoostedTreesRegressor
 from models.model import GCNLSTM
 from models.model import GraphTransformer2D
 from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset
@@ -273,9 +275,50 @@ def reset_weights(m):
         m.reset_parameters()
 
 
-def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
+def _boosted_tree_loss(predictions, targets, loss_type):
+    target_values = targets[:, -1, 0, :]
+    if loss_type == "nnMSE":
+        return float(np.mean(np.square(predictions - target_values)))
+
+    target_sigmas = targets[:, -1, 1, :]
+    clipped_sigmas = np.where(target_sigmas < 0.1, np.ones_like(target_sigmas), target_sigmas)
+    normalized_errors = np.square(predictions - target_values) / np.square(clipped_sigmas)
+    return float(np.mean(normalized_errors))
+
+
+def _boosted_tree_accuracy(predictions, targets):
+    target_values = targets[:, -1, 0, :]
+    std = float(target_values.std(axis=0).mean())
+    if std == 0.0:
+        return float(np.mean(np.isclose(predictions, target_values)))
+    return float(np.mean(np.abs(predictions - target_values) < (std / 3.0)))
+
+
+def train_boosted_tree_model(model, xt, yt, xv, yv, loss_type):
+    print("start boosted tree train")
+    model.fit(xt, yt)
+
+    prediction_train = model.predict(xt)
+    prediction_valid = model.predict(xv)
+
+    loss_train = _boosted_tree_loss(prediction_train, yt, loss_type)
+    loss_valid = _boosted_tree_loss(prediction_valid, yv, loss_type)
+    accuracy_train = _boosted_tree_accuracy(prediction_train, yt)
+    accuracy_valid = _boosted_tree_accuracy(prediction_valid, yv)
+
+    print(
+        "BoostedTrees loss: %f, valid loss: %f, Train accuracy: %f, V acc: %f"
+        % (loss_train, loss_valid, accuracy_train * 100, accuracy_valid * 100)
+    )
+
+    return accuracy_valid, loss_train, loss_valid
+
+
+def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_override=None):
     from config import Config
     config = Config()
+    if model_type_override is not None:
+        config.modelType = model_type_override
     print("start nn training")
 
     transferTraining = transfer
@@ -285,6 +328,10 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         datasetMod = "test_nn"   #keep mean and std from before
     #dataManager.manageDataset(datasetMod,ind)
     
+    data_manager = globals().get("dataManager")
+    if data_manager is None:
+        data_manager = DataManager(mainPath)
+
     f = open(mainPath+"function_prediction/trainresults1.txt", "w")
 
     for i in range(1):
@@ -312,7 +359,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
         nNeurons = 200
         fullset = pandas.read_parquet(mainPath+"function_prediction/" + simulation_path)
         #fullset = dataManager.normalizeDatasetNormal(fullset)
-        fullset = dataManager.normalizeDatasetScale(fullset)
+        fullset = data_manager.normalizeDatasetScale(fullset)
         #fullset.drop(list(fullset.columns)[0],axis=1,inplace=True) #drop indices
         print(fullset)
         #dftCorr = fullset.sample(frac=1).reset_index(drop=True) # shuffling
@@ -357,6 +404,16 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             
             train_dataset = My_dataset((xt,yt))
             valid_dataset = My_dataset((xv,yv))
+        elif (config.modelType == "BoostedTrees"):
+            if (validShuffled):
+                shuffled_indicesf = np.random.permutation(xf.shape[0])
+                xt = xf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
+                yt = yf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
+                xv = xf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
+                yv = yf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
+            else:
+                xt, yt, _, _ = load_dataset(config, dataTable)
+                xv, yv, _, _ = load_dataset(config, validTable)
         else:
             xt, yt = load_dataset(config, dataTable)
             xv, yv = load_dataset(config,validTable)
@@ -366,18 +423,21 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             train_dataset = My_dataset((xt,yt))
             valid_dataset = My_dataset((xv,yv))
 
-        dropLastT = False
-        if (dataTable.shape[0]%batch_size==1):
-            dropLastT = True
-        dropLastV = False
-        if (validTable.shape[0]%batch_size==1):
-            dropLastV = True
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=dropLastT)
-        valid_loader = DataLoader(valid_dataset, batch_size=batch_size, drop_last=dropLastV)
+        if (config.modelType != "BoostedTrees"):
+            dropLastT = False
+            if (dataTable.shape[0]%batch_size==1):
+                dropLastT = True
+            dropLastV = False
+            if (validTable.shape[0]%batch_size==1):
+                dropLastV = True
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=dropLastT)
+            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, drop_last=dropLastV)
 
-        input_dim = train_dataset[0][0].shape
+            input_dim = train_dataset[0][0].shape
 
-        del validTable, valid_dataset
+            del validTable, valid_dataset
+        else:
+            input_dim = xt.shape[1:]
 
         if (config.modelType == "ConvLSTM"):
             nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(5,5), num_layers=1, bias=0, output_size=1) #16 16
@@ -392,8 +452,17 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             sent_length = input_dim[-3]
             #exported_program = torch.export.export(GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1), (torch.randn(2, sent_length, in_channels, n_nodes),))
             #torch.export.save(exported_program, 'exported_gConvLSTM.pt2')
+        elif (config.modelType == "BoostedTrees"):
+            nn_model = BoostedTreesRegressor(
+                max_depth=3,
+                learning_rate=0.05,
+                max_iter=300,
+                min_samples_leaf=15,
+                l2_regularization=1e-3,
+                random_state=42,
+            )
 
-        if (transferTraining):
+        if (transferTraining and config.modelType != "BoostedTrees"):
             nn_model.load_state_dict(torch.load(mainPath+"function_prediction/tempModelT.pt"))
             #nn_model.hv_mlp.apply(reset_weights)
             nn_model.train()
@@ -444,20 +513,28 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet"):
             loss.loss_type = "customMSE"
 
         #optimizer = optim.SGD(nn_model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.05)
-        optimizer = optim.AdamW(nn_model.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=weight_decay)
+        if (config.modelType == "BoostedTrees"):
+            print("prepared to train boosted trees")
+            loc_acc, loss_train, loss_valid = train_boosted_tree_model(nn_model, xt, yt, xv, yv, lossType)
+        else:
+            optimizer = optim.AdamW(nn_model.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=weight_decay)
 
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.75)
-        #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
+            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.75)
+            #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
 
-        print("prepared to train nn")
-        loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, epochs, valid_loader, scheduler = scheduler)
+            print("prepared to train nn")
+            loc_acc = train_DN_model(nn_model, train_loader, loss, optimizer, epochs, valid_loader, scheduler = scheduler)
 
         print("trained nn, valid acc = " + str(loc_acc))
 
         f.write(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay) + " " + str(100*loc_acc) + "\n")
 
-        nn_model.eval()
-        torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModelT.pt")
+        if (config.modelType == "BoostedTrees"):
+            with open(mainPath+"function_prediction/tempModelBoosted.pkl", "wb") as model_file:
+                pickle.dump(nn_model, model_file)
+        else:
+            nn_model.eval()
+            torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModelT.pt")
         #nn_model = torch.jit.script(nn_model)
 
         if (config.modelType == "ConvLSTM"):
@@ -499,11 +576,11 @@ if __name__ == "__main__":
     mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
     dataManager = DataManager(mainPath)
 
-    #dataManager.manageDataset("train_nn",0)
+    dataManager.manageDataset("train_nn",0)
     #dataManager.manageDataset("test_nn",0)
 
     #dataManager.manageDataset("test_nn",0)
-    #train_NN(0,False,mainPath)
+    train_NN(0,False,mainPath)
     #train_NN(0,True,mainPath)
 
 

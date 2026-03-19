@@ -10,6 +10,13 @@ from torch.autograd import Variable
 import numpy as np
 from torch.jit import ignore
 
+try:
+    from sklearn.ensemble import HistGradientBoostingRegressor
+    from sklearn.multioutput import MultiOutputRegressor
+except ImportError:
+    HistGradientBoostingRegressor = None
+    MultiOutputRegressor = None
+
 
 
 class GraphConvolution(nn.Module):
@@ -1167,3 +1174,62 @@ class Conv2dLSTM(nn.Module):
 
         return result_tensor
 
+
+class BoostedTreesRegressor:
+    """
+    Lightweight tabular regressor for the calibration task.
+
+    The current inputs are mostly smooth and close to linear, with relatively
+    small target sigmas. A shallow boosted-tree ensemble is a good match here:
+    it preserves the strong linear trend, while still being able to correct the
+    few non-linear feature interactions that appear in some channels or in
+    future trigger-derived inputs.
+
+    The model intentionally ignores the graph/recurrent structure. Instead it
+    flattens the full time window `(sentence, channels, cells)` into one
+    tabular vector and trains one shallow gradient-boosted regressor per output
+    cell. This keeps the implementation simple and provides a robust baseline
+    alongside the existing neural models.
+    """
+
+    def __init__(
+        self,
+        max_depth=3,
+        learning_rate=0.05,
+        max_iter=250,
+        min_samples_leaf=20,
+        l2_regularization=1e-3,
+        random_state=42,
+    ):
+        if HistGradientBoostingRegressor is None or MultiOutputRegressor is None:
+            raise ImportError("scikit-learn is required for BoostedTreesRegressor")
+
+        base_estimator = HistGradientBoostingRegressor(
+            loss="squared_error",
+            learning_rate=learning_rate,
+            max_iter=max_iter,
+            max_depth=max_depth,
+            min_samples_leaf=min_samples_leaf,
+            l2_regularization=l2_regularization,
+            early_stopping=True,
+            validation_fraction=0.1,
+            n_iter_no_change=20,
+            random_state=random_state,
+        )
+        self.model = MultiOutputRegressor(base_estimator)
+
+    def _flatten_features(self, x):
+        x_array = np.asarray(x, dtype=np.float32)
+        return x_array.reshape(x_array.shape[0], -1)
+
+    def fit(self, x, y):
+        x_flat = self._flatten_features(x)
+        y_array = np.asarray(y, dtype=np.float32)
+        if y_array.ndim == 4:
+            y_array = y_array[:, -1, 0, :]
+        self.model.fit(x_flat, y_array)
+        return self
+
+    def predict(self, x):
+        x_flat = self._flatten_features(x)
+        return self.model.predict(x_flat).astype(np.float32)
