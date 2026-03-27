@@ -606,9 +606,9 @@ void drawTargetPredictionComparison(){
     ifstream fin2;
     TH1F* hdTarget1D = new TH1F("hdTarget1D","target1-target2;#errors;counts",1000,-100,100);
     //fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPrecise.dat").c_str());
-	//  fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat").c_str());
+	  fin2.open((saveLocation + "info_tables/run-mean_dEdxMDCSecModPreciseFit2.dat").c_str());
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets25beamTFull.dat");
-    fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets24beamTFull1.dat");
+    //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/targets24beamTFull1.dat");
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOut.dat");
     std::map<int, vector< pair<double,double> > > targets;
     std::map<int, vector< pair<double,double> > > targetsNormalized;
@@ -622,8 +622,8 @@ void drawTargetPredictionComparison(){
         vector< pair<double, double> > targetNodesNormalized;
         double meanTarget, meanTargetErr;
         for (size_t i = 0; i < 24; i++){
-            fin2 >> run >> runEnd >> sector >> mod >> target >> targetErr;
-            //fin2 >> run >> sector >> mod >> target >> targetErr;
+            //fin2 >> run >> runEnd >> sector >> mod >> target >> targetErr;
+            fin2 >> run >> sector >> mod >> target >> targetErr;
             run = averageRun(run, runBorders);
             if (predTargetNodes.size()>0){
                 //if (fabs(target - predTargetNodes[i].first) < predTargetNodes[i].second*5)
@@ -703,9 +703,9 @@ void drawTargetPredictionComparison(){
     //fin2.open((saveLocation + "info_tables/MDCModSecPrecise.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseExtended.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseCosmic25VaryHV.dat").c_str());
-    //fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb22ends9.dat").c_str());
+    fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb22ends9.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseApr25ends9.dat").c_str());
-    fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb24ends9a.dat").c_str());
+    //fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb24ends9a.dat").c_str());
     std::map<int, vector< double > > mdcChanChamb0;
     cout << "a" << endl;
     const int channelNumber = 9;
