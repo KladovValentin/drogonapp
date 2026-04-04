@@ -69,9 +69,9 @@ class GraphConvolutionNLayer(nn.Module):
 
 
 
-class GConvLSTMCellspatial(nn.Module):
+class GConvLSTMCellspectral1(nn.Module):
     def __init__(self, input_size, hidden_size, kernel_size, bias=True, normalization = "sym"):
-        super(GConvLSTMCellspatial, self).__init__()
+        super(GConvLSTMCellspectral1, self).__init__()
 
         self.in_channels = input_size[0]
         self.n_nodes = input_size[1]
@@ -124,13 +124,6 @@ class GConvLSTMCellspatial(nn.Module):
         self._create_output_gate_parameters_and_layers()
 
     def _set_parameters(self):
-        #glorot(self.w_c_i)
-        #glorot(self.w_c_f)
-        #glorot(self.w_c_o)
-        #zeros(self.b_i)
-        #zeros(self.b_f)
-        #zeros(self.b_c)
-        #zeros(self.b_o)
         nn.init.xavier_uniform_(self.w_c_i)
         nn.init.xavier_uniform_(self.w_c_f)
         nn.init.xavier_uniform_(self.w_c_o)
@@ -278,9 +271,7 @@ class GConvLSTMCell(nn.Module):
     def _create_input_gate_parameters_and_layers(self):
 
         self.conv_x_i = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_x_i = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         self.conv_h_i = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_h_i = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
 
         #self.conv_x_i = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         #self.conv_h_i = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
@@ -291,9 +282,7 @@ class GConvLSTMCell(nn.Module):
     def _create_forget_gate_parameters_and_layers(self):
 
         self.conv_x_f = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_x_f = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         self.conv_h_f = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_h_f = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
 
         #self.conv_x_f = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         #self.conv_h_f = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
@@ -304,9 +293,7 @@ class GConvLSTMCell(nn.Module):
     def _create_cell_state_parameters_and_layers(self):
 
         self.conv_x_c = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_x_c = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         self.conv_h_c = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_h_c = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
 
         #self.conv_x_c = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         #self.conv_h_c = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
@@ -316,9 +303,7 @@ class GConvLSTMCell(nn.Module):
     def _create_output_gate_parameters_and_layers(self):
 
         self.conv_x_o = ChebConv(in_channels=self.in_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_x_o = GCNConv(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         self.conv_h_o = ChebConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels, K=self.K, normalization=self.normalization, bias=self.bias )
-        #self.conv_h_o = GCNConv(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
 
         #self.conv_x_o = GraphConvolutionNLayer(in_channels=self.in_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
         #self.conv_h_o = GraphConvolutionNLayer(in_channels=self.hidden_channels, hidden_channels=self.hidden_channels, num_layers=self.K, out_channels=self.hidden_channels)
@@ -333,13 +318,6 @@ class GConvLSTMCell(nn.Module):
         self._create_output_gate_parameters_and_layers()
 
     def _set_parameters(self):
-        #glorot(self.w_c_i)
-        #glorot(self.w_c_f)
-        #glorot(self.w_c_o)
-        #zeros(self.b_i)
-        #zeros(self.b_f)
-        #zeros(self.b_c)
-        #zeros(self.b_o)
         nn.init.xavier_uniform_(self.w_c_i)
         nn.init.xavier_uniform_(self.w_c_f)
         nn.init.xavier_uniform_(self.w_c_o)
@@ -431,14 +409,9 @@ class GConvLSTMCell(nn.Module):
 
 
 class FiLM(nn.Module):
-    def __init__(self, cond_dim, feature_dim, nodes=24):
+    def __init__(self, cond_dim, feature_dim, nodes=12):
         super().__init__()
         self.gamma = nn.Sequential(
-            nn.Linear(cond_dim, 16),
-            nn.ReLU(),
-            nn.Linear(16, feature_dim)
-        )
-        self.beta = nn.Sequential(
             nn.Linear(cond_dim, 16),
             nn.ReLU(),
             nn.Linear(16, feature_dim)
@@ -446,7 +419,8 @@ class FiLM(nn.Module):
 
         self.scale = nn.Parameter(torch.ones(nodes))
         self.mean = nn.Parameter(torch.ones(nodes))
-        self.averageHV = nn.Parameter(torch.ones(nodes)*1.75)
+        #self.averageHV = nn.Parameter(torch.ones(nodes)*1.75)
+        #self.register_buffer("averageHV", torch.ones(nodes) * 1.75)
 
 
     def forward(self, cond, x):
@@ -454,14 +428,31 @@ class FiLM(nn.Module):
         cond: shape (batch * sentence, 1)
         x: shape (batch, sentence, nodes, feature_dim)
         """
-        #B, S, N, F = x.shape
-        #cond = cond.reshape(B * S * N, 1)
-        #gamma = self.gamma(cond).view(B, S, N, F)
-        #beta = self.beta(cond).view(B, S, N, F)
+        #B, S, N = x.shape
+        #cond = ((cond-1.75)*(self.mean.view(1,1,N) + 1e-6)).reshape(B * S * N, 1)
+        #gamma = self.gamma(cond).view(B, S, N)
+        #a = (self.scale.view(1,1,N)+ 1e-6) * torch.tanh(gamma)
+        #a = self.scale.view(1,1,N) * gamma
 
-        #return gamma * x + beta
-        #print( 1 + (cond-self.averageHV)*self.scale )
-        return x*( 1 + (cond-self.averageHV)*self.scale )
+        #print(self.mean)
+        #print(gamma)
+
+        
+        #beta = self.beta(cond-1.75).view(B, S, N, F)
+
+        #print(beta.shape)
+        #print(x.shape)
+        #print((x * (1 + 0.15 * a)).shape)
+
+        #return  x * (1 + 0.15 * a)
+        #print(1 + (cond-self.averageHV)*self.scale )
+        #self.averageHV = nn.Parameter(torch.ones(12) * 1.75, requires_grad=False)
+        #print(cond[7])
+        #print(self.averageHV)
+        #return x+(  (cond-self.averageHV)*self.scale*10 )
+        scale = torch.nn.functional.softplus(self.scale) + 1e-6
+        #print(scale)
+        return x*( 1 + (cond-1.75)*scale*5 )
 
 
 
@@ -498,7 +489,7 @@ class LearnedInputNormalizer(nn.Module):
 
 
 class GCNLSTM(torch.nn.Module):
-    def __init__(self, input_dims, embedding_size, hidden_size, kernel_size, num_layers, e_i, e_a):
+    def __init__(self, input_dims, embedding_size, hidden_size, kernel_size, num_layers, e_i, e_a, gcn_cell_type="spectral", sequence_source="hidden_state"):
         super().__init__()
 
         self.e_a = nn.Parameter(torch.sigmoid(e_a.clone()), requires_grad=True)
@@ -511,15 +502,24 @@ class GCNLSTM(torch.nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.kernel_size = kernel_size
+        self.gcn_cell_type = gcn_cell_type
+        self.sequence_source = sequence_source
         
         self.rnn = nn.LSTM(self.embedding_size, self.hidden_size, num_layers, batch_first=True, bidirectional=False)
 
         #self.gcn_cell_list = nn.ModuleList([GConvLSTMCell((self.input_size,self.nodes),
         #                                    self.hidden_size,
         #                                    self.kernel_size) for _ in range(self.num_layers)])
-        self.gcn_cell_list = nn.ModuleList([GConvLSTMCellspatial((self.input_size,self.nodes),
-                                            self.hidden_size,
-                                            self.kernel_size) for _ in range(self.num_layers)])
+        if self.gcn_cell_type == "cheb":
+            self.gcn_cell_list = nn.ModuleList([GConvLSTMCell((self.input_size,self.nodes),
+                                                self.hidden_size,
+                                                self.kernel_size) for _ in range(self.num_layers)])
+        elif self.gcn_cell_type == "spectral":
+            self.gcn_cell_list = nn.ModuleList([GConvLSTMCellspectral1((self.input_size,self.nodes),
+                                                self.hidden_size,
+                                                self.kernel_size) for _ in range(self.num_layers)])
+        else:
+            raise ValueError(f"Unsupported gcn_cell_type: {self.gcn_cell_type}")
         self.gnn = GCN(in_channels=self.input_size, hidden_channels=self.hidden_size, num_layers=kernel_size, out_channels=self.hidden_size, bias=True)
 
         #self.linear = torch.nn.Linear(hidden_size, 1)
@@ -534,18 +534,18 @@ class GCNLSTM(torch.nn.Module):
             #nn.Linear(self.hidden_size, 128, bias=True),
             nn.Linear(self.embedding_size*1, 64, bias=True),
             nn.BatchNorm1d(64),
-            nn.Dropout(0.5),
+            #nn.Dropout(0.5),
             nn.LeakyReLU(inplace=True),
 
-            nn.Linear(64, 64, bias=True),
-            nn.BatchNorm1d(64),
-            nn.LeakyReLU(inplace=True),
+            #nn.Linear(64, 64, bias=True),
+            #nn.BatchNorm1d(64),
+            #nn.LeakyReLU(inplace=True),
 
             nn.Linear(64, self.embedding_size)
         ) for _ in range(self.nodes)])
 
 
-        #self.film = FiLM(cond_dim=1, feature_dim=self.embedding_size)
+        #self.film = FiLM(cond_dim=1, feature_dim=self.embedding_size, nodes=self.nodes)
         self.film = FiLM(cond_dim=1, feature_dim=1, nodes=self.nodes)
 
 
@@ -595,7 +595,7 @@ class GCNLSTM(torch.nn.Module):
 
         inputDeepClone = input.movedim(2,3)
         inputDeep = inputDeepClone.clone() 
-        #inputDeep[:, :, :, 1] = 0    #set HV to zero to not use it
+        inputDeep[:, :, :, 1] = 0    #set HV to zero to not use it
 
 
         #print(inputDeep[120,-1,:,:])
@@ -635,7 +635,13 @@ class GCNLSTM(torch.nn.Module):
                         )
                 hidden[layer] = hidden_l
 
-            output_list1.append(hidden_l[0].unsqueeze(1))
+            if self.sequence_source == "hidden_state":
+                output_list1.append(hidden_l[0].unsqueeze(1))
+            elif self.sequence_source == "input_proj":
+                output_list1.append(self.input_proj(inputDeep[:, t, :, :]).unsqueeze(1))
+            else:
+                raise ValueError(f"Unsupported sequence_source: {self.sequence_source}")
+            #output_list1.append(hidden_l[0].unsqueeze(1))
             #output_list1.append(self.input_proj(inputDeep[:, t, :, :]).unsqueeze(1))
             #output_list1.append(hidden_l.unsqueeze(1))
 
@@ -695,7 +701,7 @@ class GCNLSTM(torch.nn.Module):
         output_list = []
         for i in range(self.nodes):
 
-            #inputDeepX = (self.nn_model2[0](inputDeep[:,:,i,:].reshape((batch_size*sentence_length, self.hidden_size)))).reshape((batch_size, sentence_length, int(self.embedding_size*4/4)))
+            #inputDeepX = (self.nn_model2[i](inputDeep[:,:,i,:].reshape((batch_size*sentence_length, self.hidden_size)))).reshape((batch_size, sentence_length, int(self.embedding_size*4/4)))
             #hv_features = self.hv_mlp(hv_input[:,:,i].reshape((batch_size * sentence_length, 1)))
             #hv_features = hv_features.reshape((batch_size, sentence_length, int(self.embedding_size*4/4)))  # shape: (batch,sentence, nodes, embedding/4)
             #inputDeepX = torch.cat([inputDeepX, hv_features], dim=-1)
@@ -716,8 +722,12 @@ class GCNLSTM(torch.nn.Module):
 
 
         result_tensor = self.linear(embedded.reshape((batch_size*sentence_length*self.nodes, self.embedding_size))).reshape((batch_size, sentence_length, self.nodes))
-        #result_tensor = self.film(hv_input.squeeze(-1), result_tensor)  # shape: (batch, sentence, nodes)
         result_tensor = self.scale_shift(result_tensor)
+        #print(result_tensor[:,0,10])
+        #print(result_tensor.shape)
+        result_tensor = self.film(hv_input.squeeze(-1), result_tensor)  # shape: (batch, sentence, nodes)
+        #print(hv_input.squeeze(-1)[:,0,10])
+        #print(result_tensor[:,0,10])
 
 
 
@@ -737,46 +747,6 @@ class GCNLSTM(torch.nn.Module):
 
 
         #tempResult = self.linear(embedded.reshape((batch_size*sentence_length*self.nodes, self.hidden_size))).reshape((batch_size, sentence_length, self.nodes))
-        
-
-
-        # LSTM + GCN going "column-by-column" through the sentence
-
-        """
-        for t in range(sentence_length):
-
-            for layer in range(self.num_layers):
-
-                if layer == 0:
-                    hidden_l = self.gcn_cell_list[layer](
-                        embedded[:, t, :, :],
-                        self.e_i, self.e_a,
-                        (hidden[layer][0],hidden[layer][1])
-                        )
-                    #hidden_l = embedded[:, t, :, :]
-                else:
-                    hidden_l = self.gcn_cell_list[layer](
-                        hidden[layer - 1][0],
-                        self.e_i, self.e_a,
-                        (hidden[layer][0], hidden[layer][1])
-                        )
-                    #hidden_l = hidden[layer - 1]
-
-                hidden[layer] = hidden_l
-
-            #print(hidden_l[0].shape)
-            newTensor = self.linear(hidden_l[0].reshape((batch_size*self.nodes, self.hidden_size))).reshape((batch_size, 1, self.nodes))
-            #print (newTensor.shape)
-            #newTensorI = newTensor.unsqueeze(1)
-            #result_tensor[:,t,:] = newTensor
-            output_list1.append(newTensor)
-            #if (t == 0):
-            #    result_tensor = newTensorI
-            #else:
-            #    result_tensor = torch.cat((result_tensor, newTensorI), dim=1)
-            #print(hidden_l[0].shape,newTensor.shape, result_tensor.shape)
-        result_tensor = torch.cat(output_list1, dim=1)
-        """
 
         #result_tensor = self.linear(embedded.reshape(batch_size*sentence_length* self.nodes, self.embedding_size)).reshape((batch_size, sentence_length, self.nodes)) 
         
@@ -1186,19 +1156,25 @@ class BoostedTreesRegressor:
     future trigger-derived inputs.
 
     The model intentionally ignores the graph/recurrent structure. Instead it
-    flattens the full time window `(sentence, channels, cells)` into one
-    tabular vector and trains one shallow gradient-boosted regressor per output
-    cell. This keeps the implementation simple and provides a robust baseline
-    alongside the existing neural models.
+    converts the time window into a compact tabular summary per feature/cell:
+    the latest value, window mean, long drift across the full window, and short
+    drift over the last step. This reduces the effective feature count from the
+    full flattened tensor and keeps the model size in a reasonable range for
+    O(5k-10k) runs, which is important for avoiding overtraining.
+
+    One shallow gradient-boosted regressor is trained per output cell. This
+    keeps the implementation simple and provides a robust baseline alongside the
+    existing neural models.
     """
 
     def __init__(
         self,
-        max_depth=3,
-        learning_rate=0.05,
-        max_iter=250,
-        min_samples_leaf=20,
-        l2_regularization=1e-3,
+        max_depth=2,
+        learning_rate=0.04,
+        max_iter=90,
+        min_samples_leaf=70,
+        max_leaf_nodes=10,
+        l2_regularization=0.35,
         random_state=42,
     ):
         if HistGradientBoostingRegressor is None or MultiOutputRegressor is None:
@@ -1210,6 +1186,7 @@ class BoostedTreesRegressor:
             max_iter=max_iter,
             max_depth=max_depth,
             min_samples_leaf=min_samples_leaf,
+            max_leaf_nodes=max_leaf_nodes,
             l2_regularization=l2_regularization,
             early_stopping=True,
             validation_fraction=0.1,
@@ -1220,7 +1197,23 @@ class BoostedTreesRegressor:
 
     def _flatten_features(self, x):
         x_array = np.asarray(x, dtype=np.float32)
-        return x_array.reshape(x_array.shape[0], -1)
+        last_values = x_array[:, -1]
+        window_means = x_array.mean(axis=1)
+        long_drift = x_array[:, -1] - x_array[:, 0]
+        if x_array.shape[1] > 1:
+            short_drift = x_array[:, -1] - x_array[:, -2]
+        else:
+            short_drift = np.zeros_like(last_values)
+
+        return np.concatenate(
+            [
+                last_values.reshape(x_array.shape[0], -1),
+                window_means.reshape(x_array.shape[0], -1),
+                long_drift.reshape(x_array.shape[0], -1),
+                short_drift.reshape(x_array.shape[0], -1),
+            ],
+            axis=1,
+        )
 
     def fit(self, x, y):
         x_flat = self._flatten_features(x)

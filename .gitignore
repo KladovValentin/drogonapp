@@ -24,6 +24,7 @@ env/
 *.dat
 *.pcm
 *.pdf
+*.png
 runlist*
 runs*
 elapsed*

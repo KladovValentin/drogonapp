@@ -570,7 +570,62 @@ double averageRun(int run, vector< pair<int, int> > runBorders){
     return (run + nextTargetRun) / 2.0;
 }
 
-void drawTargetPredictionComparison(){
+vector<TGraph*> getPredictedHVGraph(const string& predictionFile = saveLocation + "function_prediction/predicted/predicted_0HV.txt"){
+    ifstream fin(predictionFile.c_str());
+    vector<TGraph*> graphs;
+    if (!fin.is_open()) {
+        cerr << "Failed to open HV prediction file: " << predictionFile << endl;
+        return graphs;
+    }
+
+    vector<vector<double> > table;
+    string line;
+    while (getline(fin, line)) {
+        if (line.empty())
+            continue;
+
+        istringstream iss(line);
+        vector<double> row;
+        double value = 0.0;
+        while (iss >> value) {
+            row.push_back(value);
+        }
+        if (row.size() < 2)
+            continue;
+
+        table.push_back(row);
+    }
+    fin.close();
+
+    if (table.empty())
+        return graphs;
+
+    const size_t nCols = table[0].size();
+    graphs.reserve(nCols - 1);
+    for (size_t col = 1; col < nCols; ++col) {
+        TGraph* graph = new TGraph();
+        graph->SetName(Form("graphHVtime%d", static_cast<int>(col - 1)));
+        graph->SetTitle(Form("Predicted HV node %d;Date [day/month];High Voltage [kV]", static_cast<int>(col - 1)));
+        graph->SetMarkerStyle(21);
+        graph->SetMarkerSize(0.6);
+        graph->SetLineColor(4);
+        graph->SetMarkerColor(4);
+        graph->SetLineWidth(1);
+
+        for (size_t row = 0; row < table.size(); ++row) {
+            if (table[row].size() != nCols)
+                continue;
+            graph->SetPoint(graph->GetN(), runToDateNumber(static_cast<int>(table[row][0])), table[row][col]);
+        }
+        graph->GetXaxis()->SetTimeDisplay(1);
+        graph->GetXaxis()->SetTimeFormat("%d/%m %H:%M");
+        graphs.push_back(graph);
+    }
+
+    return graphs;
+}
+
+void drawTargetPredictionComparison(int chanTo = 0){
     int baseTrainingNodes = 12;
     int nodes_length = baseTrainingNodes;
     TFile* fileOut = new TFile("savedPlotsTemp1.root","RECREATE");
@@ -583,7 +638,6 @@ void drawTargetPredictionComparison(){
     vector< pair<int,int> > runBorders = loadrunlistWithEnds(0, 1e11); //444140006
 
     //const std::string saveLocation = "/home/localadmin_jmesschendorp/gsiWorkFiles/drogonapp/testDrogonApp/serverData/";
-    int chanTo = 7;
     /// Reading mean and std
     ifstream fin1;
     vector<double> meanValues, stdValues;
@@ -797,6 +851,7 @@ void drawTargetPredictionComparison(){
     }
 
 
+    vector<TGraph*> predictedHVGraphs = getPredictedHVGraph();
     fin1.open((saveLocation+ "function_prediction/predicted/predicted_0.txt").c_str());
     std::map<int, vector< double > > predictions;
     double runPrevT = 0;
@@ -982,15 +1037,17 @@ void drawTargetPredictionComparison(){
     grPTP->SetTitle("Prediction - Target;date;#sigma");
 
     TLegend *legend = new TLegend(0.7, 0.7, 0.9, 0.9);
-    legend->AddEntry(gr2, "Average ToT", "lpe");
+    //legend->AddEntry(gr2, "Average ToT", "lpe");
     //legend->AddEntry(gr1, "predicted, train dataset", "l");
     //legend->AddEntry(grP, "predicted, test dataset", "l");
     //legend->AddEntry(grPT, "Predicted, train dataset", "lpe");
     //legend->AddEntry(grPTP, "Predicted, test dataset", "lpe");
 
     //legend->AddEntry(grMDCchan2, "ToT - atm.pressure", "lpe");
-    legend->AddEntry(grMDCchan[0], "Atm. pressure", "lpe");
+    //legend->AddEntry(grMDCchan[0], "Atm. pressure", "lpe");
     //legend->AddEntry(grMDCchan[3], "Overpressure", "lpe");
+
+    legend->AddEntry(predictedHVGraphs[chanTo], "Predicted optimal HV", "lpe");
 
 
 
@@ -1012,7 +1069,9 @@ void drawTargetPredictionComparison(){
     //gr2->GetXaxis()->SetLimits(runToDateNumber(runsTargets[1])-100000, runToDateNumber(445559647));
     //hpredictedTarget->GetXaxis()->SetLimits(gr2->GetX()[0]-100000, gr2->GetX()[runsPredictedTarget.size()-1]*1.3);
     
-    drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
+    //drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
+
+    predictedHVGraphs[chanTo]->Draw("AP");
 
     //drawTargetPressureOverpressure(grMDCchan2, grMDCchan[3]);
     //drawTargetPressureOverpressure1(valuesChans1, valuesChans2);
@@ -1050,13 +1109,18 @@ void drawTargetPredictionComparison(){
     //ppredictedTarget->Draw("same");
     //legend->Draw();
 
+    legend->Draw();
 
-    TLatex latex;
-    latex.SetNDC();
-    latex.SetTextSize(0.04);
-    int moduleLatex = chanTo/6;
-    int sectorLatex = chanTo%6;
-    //latex.DrawLatex(0.15, 0.85, Form("Module %d, Sector %d",moduleLatex,sectorLatex));
+    TPaveText *title1 = new TPaveText(0.2, 0.82, 0.5, 0.88, "NDC"); // NDC = Normalized device coordinates
+    title1->AddText(Form("module %d, sector %d",chanTo/6+1,chanTo%6+1));
+    title1->SetFillColor(0); // Transparent background
+    title1->SetTextSize(0.04);
+    title1->SetTextAlign(22); // Center alignment
+    title1->Draw();
+
+
+    TString name = Form("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/cosmicFitsPdf/optimalHV_%d", chanTo);
+    canvas->SaveAs(name + ".pdf");
     
     //TCanvas* c = (TCanvas*)gROOT->GetListOfCanvases()->At(0);
     canvas->Update();
@@ -1222,7 +1286,7 @@ void drawTvsHV(std::map<int, vector< pair<double,double> > > targets,
                 averageHV = find_closest(mdcChanChamb0, n.first)->second[1*24+chamberI];
                 averageP = find_closest(mdcChanChamb0, n.first)->second[0*24+chamberI];
             }
-            if (averageHV <= 1500 || nextTargetRun-n.first < 250)
+            if (averageHV <= 1500 || nextTargetRun-n.first < 150)
                 continue;
             //targetPoints.push_back(1./2.*TMath::Erfc(n.second[chamberI].first/2.));
             targetPoints.push_back(n.second[chamberI].first);
@@ -1262,12 +1326,12 @@ void drawTvsHV(std::map<int, vector< pair<double,double> > > targets,
         canvas->SetGridy();
         canvas->SetGridx();
         grTvsHV->SetName("grTvsHV");
-        grTvsHV->SetTitle("grTvsHV;High Voltage [V];Mean ToT [ns]");
+        grTvsHV->SetTitle(";High Voltage [V];Mean ToT [ns]");
         //grTvsHV->SetTitle("grTvsHV;High Voltage [V];ToT distribution width [ns]");
         //grTvsHV->SetTitle("grTvsHV;High Voltage [V];Signal-To-Valley ratio");
         //grTvsHV->SetTitle("grTvsHV;High Voltage [V];Erfc((valleyPos-signalPeak)/2#sigma)");
         grPressurevsHV->SetName("grPressurevsHV");
-        grTvsHV->SetMarkerStyle(20);    grTvsHV->SetMarkerSize(1.3);    grTvsHV->SetLineColor(1);    grTvsHV->SetMarkerColor(1);    grTvsHV->SetLineWidth(1);
+        grTvsHV->SetMarkerStyle(20);    grTvsHV->SetMarkerSize(1.5);    grTvsHV->SetLineColor(1);    grTvsHV->SetMarkerColor(1);    grTvsHV->SetLineWidth(1);
         grPressurevsHV->SetMarkerStyle(21);    grPressurevsHV->SetMarkerSize(1.4);    grPressurevsHV->SetLineColor(kBlue);    grPressurevsHV->SetMarkerColor(kBlue);    grPressurevsHV->SetLineWidth(2);
         
         //grTvsHV->GetYaxis()->SetRangeUser(0,grTvsHV->GetHistogram()->GetMaximum());
@@ -1275,11 +1339,13 @@ void drawTvsHV(std::map<int, vector< pair<double,double> > > targets,
         //TF1* fTvsHV = new TF1("fTvsHV", "[0]*x+[1]",1600,1800);
         //TF1* fTvsHV = new TF1("fTvsHV", "twoLinesFit",1600,1800,5);
         //TF1* fTvsHV = new TF1("fTvsHV", "[0] + [1]*(x-[3]) + [2]*pow(x-[3],2)",1600,1800);
-        //TF1* fTvsHV = new TF1("fTvsHV", "[0] + [1]*(x-[3]) + [2]*exp((x-[3])/[4])",1600,1790);
-        TF1* fTvsHV = new TF1("fTvsHV", "[0] + [1]*(x-[2])",1600,1790);
-        //fTvsHV->SetParameters(0.5,0,0.5,1700,500);
-        fTvsHV->SetParameters(0.5,0,1710);
-        grTvsHV->Fit("fTvsHV","","",1600,1780);
+        TF1* fTvsHV = new TF1("fTvsHV", "[0] + [1]*(x-[3]) + [2]*exp((x-[3])/[4])",1600,1790);
+        //TF1* fTvsHV = new TF1("fTvsHV", "[0] + [1]*(x-[2])",1600,1790);
+        fTvsHV->SetParameters(0.5,0,0.5,1700,500);
+        //fTvsHV->SetParameters(0.5,0,1710);
+        fTvsHV->SetLineStyle(2);
+        fTvsHV->SetLineColor(kGray);
+        grTvsHV->Fit("fTvsHV","","",1600,1790);
 
         gPad->Update(); // Force canvas update before modifying axes
         TGaxis *rightAxis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
@@ -1305,13 +1371,15 @@ void drawTvsHV(std::map<int, vector< pair<double,double> > > targets,
         }
         //grPressurevsHV->Draw("P"); // "SAME" overlays it on the existing plot
 
-        grPredictedvsHV->SetMarkerStyle(26);    grPredictedvsHV->SetMarkerSize(1.0);    grPredictedvsHV->SetLineColor(3);    grPredictedvsHV->SetMarkerColor(3);    grPredictedvsHV->SetLineWidth(1);
-        grPredictedPvsHV->SetMarkerStyle(24);   grPredictedPvsHV->SetMarkerSize(1.0);   grPredictedPvsHV->SetLineColor(3);   grPredictedPvsHV->SetMarkerColor(2);   grPredictedPvsHV->SetLineWidth(1);
+        grPredictedvsHV->SetMarkerStyle(26);    grPredictedvsHV->SetMarkerSize(1.5);    grPredictedvsHV->SetLineColor(3);    grPredictedvsHV->SetMarkerColor(3);    grPredictedvsHV->SetLineWidth(1);
+        grPredictedPvsHV->SetMarkerStyle(21);   grPredictedPvsHV->SetMarkerSize(1.5);   grPredictedPvsHV->SetLineColor(3);   grPredictedPvsHV->SetMarkerColor(2);   grPredictedPvsHV->SetLineWidth(1);
         grPredictedvsHV->Draw("Psame");
         grPredictedPvsHV->Draw("Psame");
 
 
         TF1* fitExpHV = expGraphsHV[chamberI]->GetFunction("pol1");
+        fitExpHV->SetLineStyle(2);
+        fitExpHV->SetLineColor(kBlue);        
         double scaleFactorExp = fTvsHV->Eval(1710) / fitExpHV->Eval(1710);
         for (int i = 0; i < expGraphsHV[chamberI]->GetN(); ++i) {
             double x, y;
@@ -1381,6 +1449,8 @@ void drawTvsHV(std::map<int, vector< pair<double,double> > > targets,
         canvas->SetName(Form("canvas_%d",chamberI));
         grTvsHV->Write();
         canvas->Write();
+        TString name = Form("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/cosmicFitsPdf/cosmicFitChamberExp%d",chamberI);
+        canvas->SaveAs(name + ".pdf");
     }
     fOut->Close();
 
@@ -1426,7 +1496,9 @@ void drawTargetPredictionComparisonCosmics(){
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOut.dat");
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative2.dat");
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative2properPars.dat");
-    fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative100_2properPars.dat");
+    //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative100_2properPars.dat");
+    fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative1061.dat");
+    //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative100_2WidthproperPars.dat");
     //fin2.open("/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/testOutSeparative2WidthproperPars.dat");
     std::map<int, vector< pair<double,double> > > targets;
     std::map<int, int > targetsRunEnd;
@@ -1503,7 +1575,7 @@ void drawTargetPredictionComparisonCosmics(){
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseFeb22ends.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseCosmic25VaryHV1.dat").c_str());
     //fin2.open((saveLocation + "info_tables/MDCModSecPreciseCosmic25_2VaryHV1.dat").c_str());
-    fin2.open((saveLocation + "info_tables/MDCModSecPreciseCosmic25_106VaryHVends9a.dat").c_str());
+    fin2.open((saveLocation + "info_tables/MDCModSecPreciseCosmic25_106VaryHVends9.dat").c_str());
     std::map<int, vector< double > > mdcChanChamb0;
     cout << "a" << endl;
     const int channelSize = 9;
@@ -1595,11 +1667,8 @@ void drawTargetPredictionComparisonCosmics(){
         gr2->SetPointError(n,0.0,a.second[chanTo].second);
     }
     //downsampleGraphInPlace(gr2,0.1);
-    gr2->SetMarkerStyle(22);
-    gr2->SetMarkerSize(1.5);
-    gr2->SetMarkerColor(4);
-    gr2->SetLineColor(4);
-    gr2->SetLineWidth(2);
+    gr2->SetMarkerStyle(20);    gr2->SetMarkerSize(1.5);    gr2->SetLineColor(1);    gr2->SetMarkerColor(1);    gr2->SetLineWidth(2);
+    //gr2->GetXaxis()->SetTitleSize(0.04); gr2->GetYaxis()->SetTitleSize(0.04);
     cout << gr2->GetN() << endl;
     cout << "finished with target " << endl;
 
@@ -1753,8 +1822,8 @@ void drawTargetPredictionComparisonCosmics(){
 
     TGraphErrors* grPTd = new TGraphErrors(runsPredictedTarget.size(),&diffPredictedTargetDiff[0], &diffPredictedTarget[0], &runsPredictedTargetErr[0], &diffPredictedTargetErr[0]);
     TGraphErrors* grPTPd = new TGraphErrors(runsPredictedTargetP.size(),&diffPredictedTargetPDiff[0], &diffPredictedTargetP[0], &runsPredictedTargetErrP[0], &diffPredictedTargetErrP[0]);
-    grPT->SetMarkerStyle(26);    grPT->SetMarkerSize(1.5);    grPT->SetLineColor(3);    grPT->SetMarkerColor(3);    grPT->SetLineWidth(1);
-    grPTP->SetMarkerStyle(24);   grPTP->SetMarkerSize(1.5);   grPTP->SetLineColor(3);   grPTP->SetMarkerColor(2);   grPTP->SetLineWidth(1);
+    grPT->SetMarkerStyle(26);    grPT->SetMarkerSize(1.4);    grPT->SetLineColor(3);    grPT->SetMarkerColor(3);    grPT->SetLineWidth(1);
+    grPTP->SetMarkerStyle(21);   grPTP->SetMarkerSize(1.1);   grPTP->SetLineColor(3);   grPTP->SetMarkerColor(2);   grPTP->SetLineWidth(1);
     
 
     cout << "x1" << endl;
@@ -1780,21 +1849,23 @@ void drawTargetPredictionComparisonCosmics(){
     TPad* pad = new TPad("pad", "Pad", 0.01, 0.01, 0.99, 0.99);
     pad->Draw();
     pad->cd();
+    pad->SetGridx();
     pad->SetGridy();
 
-    gr2->SetTitle("Prediction vs Target calibration comparison;Time [hour:minute];ToT distribution mean [ns]");
+    gr2->SetTitle(";Time [hour:minute];Mean ToT [ns]");
     //gr1->SetTitle("Prediction vs Target calibration comparison;date;-dE/dx [MeV g^{-1} cm^{2}]");
     //grP->SetTitle("Prediction vs Target calibration comparison;date;-dE/dx [MeV g^{-1} cm^{2}]");
     grPT->SetTitle("Prediction - Target;date;#sigma");
     grPTP->SetTitle("Prediction - Target;date;#sigma");
 
-    TLegend *legend = new TLegend(0.7, 0.7, 0.9, 0.9);
-    legend->AddEntry(gr2, "Mean signal ToT from fit, [a.u.]", "lpe");
+    TLegend *legend = new TLegend(0.6, 0.6, 0.89, 0.89);
+    legend->SetBorderSize(0);
+    legend->AddEntry(gr2, "ToT from fit", "lpe");
     //legend->AddEntry(gr1, "predicted, train dataset", "l");
     //legend->AddEntry(grP, "predicted, test dataset", "l");
     //legend->AddEntry(grPT, "Predicted, train dataset", "lpe");
     //legend->AddEntry(grPTP, "Predicted, test dataset", "lpe");
-    legend->AddEntry(grPTP, "ToT predicted, fine-tuned cosmic", "lp");
+    legend->AddEntry(grPTP, "ToT predicted cosmic", "lp");
 
     //legend->AddEntry(grMDCchan2, "ToT - atm.pressure", "lpe");
     //legend->AddEntry(grMDCchan[0], "Atm pressure", "lpe");
@@ -1811,15 +1882,15 @@ void drawTargetPredictionComparisonCosmics(){
     //gr2->GetYaxis()->SetRangeUser(0,100);
     
     gr2->Draw("AP");
-    //grPT->Draw("Psame");
-    //grPTP->Draw("Psame");
+    grPT->Draw("Psame");
+    grPTP->Draw("Psame");
 
 
     //gr2->GetXaxis()->SetLimits(runToDateNumber(runsTargets[1])-100000, runToDateNumber(runsTargets[runsTargets.size()-1])+100000);
     //gr2->GetXaxis()->SetLimits(runToDateNumber(runsTargets[1])-100000, runToDateNumber(445559647));
     //hpredictedTarget->GetXaxis()->SetLimits(gr2->GetX()[0]-100000, gr2->GetX()[runsPredictedTarget.size()-1]*1.3);
     
-    drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
+    //drawTargetPredictionComparisonWithAsubplot(gr2, grPT, grPTP, hpredictedTarget);   //!!!!!!!!!!!!!!!!!!!!!!!!1
 
     //TCanvas* canvas2 = new TCanvas("canvas2", "Prediction vs Target calibration comparison", 1920, 950);
     //canvas2->cd();
@@ -1861,8 +1932,10 @@ void drawTargetPredictionComparisonCosmics(){
     title1->Draw();
 
 
+    TString name = "/home/localadmin_jmesschendorp/gsiWorkFiles/analysisUlocal/cosmicFitsPdf/vsTime1";
+    //canvas->SaveAs(name + ".pdf");
     
-    //drawTvsHV(targets,targetsRunEnd,mdcChanChamb0,predictions,predictionsTest);
+    drawTvsHV(targets,targetsRunEnd,mdcChanChamb0,predictions,predictionsTest);
 
 
 

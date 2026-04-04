@@ -11,7 +11,6 @@ import pandas
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-from models.model import Conv2dLSTM
 from models.model import BoostedTreesRegressor
 from models.model import GCNLSTM
 from models.model import GraphTransformer2D
@@ -19,12 +18,12 @@ from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset, r
 from torch.utils.data import Dataset, SubsetRandomSampler, DataLoader
 from tqdm.auto import tqdm
 from tqdm import trange
-from config import Config
+from config import Config, get_model_spec
 import torch.jit
 from scipy.stats import norm
 import time
 import locale
-locale.setlocale(locale.LC_NUMERIC, "C")
+locale.setlocale(locale.LC_ALL, "C")
 import ROOT
 
 activations = {}
@@ -38,33 +37,46 @@ def capture_input(name):
 
 
 def loadModel(config, input_dim, nClasses, path, e_i=0,e_a=0):
-    if (config.modelType == "ConvLSTM"):
-        nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(3,3), num_layers=1, bias=0, output_size=1)
-    elif (config.modelType == "gConvLSTM"):
-        nn_model = GCNLSTM(input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
-        #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=16, kernel_size=3, num_layers=1, e_i=e_i, e_a=e_a)
-        #nn_model = GraphTransformer2D(input_size = input_dim[-2], embedding_size=8, num_nodes = input_dim[-1], sentence_length = input_dim[-3], e_i=e_i, e_a=e_a)
-    elif (config.modelType == "BoostedTrees"):
-        with open(path+"tempModelBoosted.pkl", "rb") as model_file:
+    model_spec = get_model_spec(config.modelType)
+    if model_spec["artifact_type"] == "pickle":
+        with open(path + model_spec["artifact_name"], "rb") as model_file:
             nn_model = pickle.load(model_file)
         return nn_model
+
+    if model_spec["model_family"] == "gcn_lstm":
+        nn_model = GCNLSTM(
+            input_dims=(input_dim[-2],input_dim[-1]),
+            embedding_size=16,
+            hidden_size=16,
+            kernel_size=3,
+            num_layers=1,
+            e_i=e_i,
+            e_a=e_a,
+            gcn_cell_type=model_spec.get("gcn_cell_type", "spectral"),
+            sequence_source=model_spec.get("sequence_source", "hidden_state"),
+        )
+    elif model_spec["model_family"] == "graph_transformer":
+        nn_model = GraphTransformer2D(
+            input_size=input_dim[-2],
+            embedding_size=8,
+            num_nodes=input_dim[-1],
+            sentence_length=input_dim[-3],
+            e_i=e_i,
+            e_a=e_a,
+        )
+    else:
+        raise ValueError(f"Unsupported model family: {model_spec['model_family']}")
+
     nn_model.type(torch.FloatTensor)
-    nn_model.load_state_dict(torch.load(path+"tempModelT.pt"))
+    nn_model.load_state_dict(torch.load(path + model_spec["artifact_name"]))
     nn_model.eval()
 
-    if (config.modelType == "DNN"):
-        modelRandInput = torch.randn(1, input_dim[-1])
-    elif (config.modelType == "LSTM"):
-        modelRandInput = torch.randn(1, input_dim[0], input_dim[-1])
-    elif (config.modelType == "ConvLSTM"):
-        modelRandInput = torch.randn(1, input_dim[0], input_dim[-3], input_dim[-2], input_dim[-1])
-    elif (config.modelType == "gConvLSTM"):
-        n_nodes = input_dim[-1]
-        in_channels = input_dim[-2]
-        sent_length = input_dim[-3]
-        #e_i_r = torch.randint(0,n_nodes-1,(1,edge_length,2))
-        #e_a_r = torch.ones(1,edge_length)
-        modelRandInput = (torch.randn(1, sent_length, in_channels, n_nodes))
+    n_nodes = input_dim[-1]
+    in_channels = input_dim[-2]
+    sent_length = input_dim[-3]
+    #e_i_r = torch.randint(0,n_nodes-1,(1,edge_length,2))
+    #e_a_r = torch.ones(1,edge_length)
+    modelRandInput = (torch.randn(1, sent_length, in_channels, n_nodes))
     #torch.onnx.export(nn_model,                                # model being run
     #                  modelRandInput,    # model input (or a tuple for multiple inputs)
     #                  mainPath+"function_prediction/tempModel.onnx",           # where to save the model (can be a file or file-like object)
@@ -94,7 +106,7 @@ def checkDistributions():
     plt.show()
 
 
-def getHV(model,X):
+def getHV(model,X,optimalTarget):
     model.eval()
     nodes_length = X.shape[-1]
     # Example input X with features in each node (batch_size, num_nodes, feature_dim)
@@ -107,18 +119,26 @@ def getHV(model,X):
 
     # Optimizer setup to optimize only the specific feature at node_index and feature_index
     print(X.shape)
-    optimizer = optim.Adam([x_i], lr=0.01)
+    optimizer = optim.Adam([x_i], lr=0.1)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min",
+        factor=0.5,
+        patience=10,
+        min_lr=1e-4,
+    )
 
     # Loss function
     criterion = nn.MSELoss()
 
     # Number of iterations for the optimization process
-    num_iterations = 10   # ~300 for a normal operation
+    num_iterations = 100   # ~300 for a normal operation
 
     for iteration in range(num_iterations):
         optimizer.zero_grad()  # Clear previous gradients
         
-        Y_fixed = torch.zeros(X.size(0), nodes_length)  # Normalized target value (mean=0, std=1)
+        #Y_fixed = torch.zeros(X.size(0), nodes_length)  # Normalized target value (mean=0, std=1)
+        Y_fixed = optimalTarget.unsqueeze(0).expand(X.size(0), -1)
 
         # Create a copy of X and replace HV feature
         X_temp = X.clone().detach()  # avoid modifying original X
@@ -131,14 +151,77 @@ def getHV(model,X):
         loss.backward(retain_graph=True)  # Backward pass to compute the gradients
         
         optimizer.step()  # Update the specific feature at node_index and feature_index
+        scheduler.step(loss.item())
 
-        if iteration % 100 == 0:
-            print(f"Iteration {iteration}, Loss: {loss.item()}, Y(x_i): {Y_pred[0,0].item()}")
+        if iteration % 10 == 0:
+            print(
+                f"Iteration {iteration}, Loss: {loss.item()}, "
+                f"LR: {optimizer.param_groups[0]['lr']}, Y(x_i): {Y_pred[0,0].item()}, Y_target: {Y_fixed[0,0].item()}"
+            )
 
     # After optimization, X[:, -1, :, feature_index] should be the value that produces Y_fixed
     # Shape = (batch, nodes)
     final_x_i = x_i
     return final_x_i.clone().detach(), Y_pred
+
+
+def getHVnewton(model, X, optimalTarget):
+    model.eval()
+    nodes_length = X.shape[-1]
+    feature_index = 1
+
+    y_fixed = optimalTarget.unsqueeze(0).expand(X.size(0), -1)
+    x_i = X[:, -1, feature_index, :].clone().detach()
+
+    num_iterations = 8
+    damping = 0.7
+    slope_floor = 1e-4
+    max_step = 0.1
+    tolerance = 1e-4
+
+    for iteration in range(num_iterations):
+        x_i = x_i.detach().requires_grad_(True)
+
+        x_temp = X.clone().detach()
+        x_temp[:, -1, feature_index, :] = x_i
+
+        y_pred = model(x_temp)[:, -1, :]
+        residual = y_pred - y_fixed
+
+        max_residual = residual.abs().max().item()
+        print(
+            f"Newton iteration {iteration}, max |residual|: {max_residual}, "
+            f"Y(x_i): {y_pred[0,0].item()}, Y_target: {y_fixed[0,0].item()}"
+        )
+        if max_residual < tolerance:
+            break
+
+        diag_slopes = torch.zeros_like(x_i)
+        for node_idx in range(nodes_length):
+            grad_outputs = torch.zeros_like(y_pred)
+            grad_outputs[:, node_idx] = 1.0
+            grad = torch.autograd.grad(
+                y_pred,
+                x_i,
+                grad_outputs=grad_outputs,
+                retain_graph=True,
+                create_graph=False,
+            )[0]
+            diag_slopes[:, node_idx] = grad[:, node_idx]
+
+        safe_slopes = torch.where(
+            diag_slopes.abs() < slope_floor,
+            slope_floor * torch.sign(diag_slopes + 1e-12),
+            diag_slopes,
+        )
+        delta_x = (residual / safe_slopes).clamp(min=-max_step, max=max_step)
+        x_i = (x_i - damping * delta_x).detach()
+
+    x_temp = X.clone().detach()
+    x_temp[:, -1, feature_index, :] = x_i
+    y_pred = model(x_temp)[:, -1, :].detach()
+
+    return x_i.clone().detach(), y_pred
 
 
 def makePredicionList(config, dataManager, experiment_path, savePath, path):
@@ -173,11 +256,13 @@ def makePredicionList(config, dataManager, experiment_path, savePath, path):
     input_dim = exp_dataset[0][0].shape
     print("input shape is ",input_dim)
 
+    model_spec = get_model_spec(config.modelType)
+
     #load nn and predict
-    if (config.modelType == "gConvLSTM"):
-        nn_model = loadModel(config, input_dim, nClasses, path, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-    elif (config.modelType == "BoostedTrees"):
+    if (model_spec["artifact_type"] == "pickle"):
         nn_model = loadModel(config, input_dim, nClasses, path)
+    else:
+        nn_model = loadModel(config, input_dim, nClasses, path, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
     #else:
     #nn_model = loadModel(config, input_dim, nClasses, path)
     nn_model_eval = getattr(nn_model, "eval", None)
@@ -192,43 +277,42 @@ def makePredicionList(config, dataManager, experiment_path, savePath, path):
 
     dat_list = []
     hv_list = []
+    hv_list_ini = []
     stable_dat_list = []
     tepoch = tqdm(exp_dataLoader)
+
+
+    calculateOptimalHV = True
     
     print("")
     print("")
     start_time = time.perf_counter()
     for i_step, (x, y) in enumerate(tepoch):
         tepoch.set_description(f"Epoch {1}")
-        if(config.modelType == "ConvLSTM"):
-            prediction = (nn_model(x).detach().numpy())[:,-1,:]
-            n_nodes = input_dim[-2]
-            for i in range(n_nodes):
-                prediction[:,i] = prediction[:,i]*std[-n_nodes+i] + mean[-n_nodes+i]
-            #print(prediction)
-        elif(config.modelType == "gConvLSTM"):
-            #print(x)
-            prediction = (nn_model(x).detach().numpy())[:,-1,:]
-            predictedHV, predictionWithHV = getHV(nn_model,x)
-            n_nodes = config.cellsLength
-            for i in range(input_dim[-1]):
-                #prediction[:,i] = prediction[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
-                #prediction[:,i] = prediction[:,i]*compute_scaling_factor(mean[-2*n_nodes+i])
-                #prediction[:,i] = prediction[:,i]*100.0
-                prediction[:,i] = prediction[:,i]*std[-24*2+i] + mean[-24*2+i]
-                #predictionWithHV[:,i] = predictionWithHV[:,i]*std[-2*n_nodes+i] + mean[-2*n_nodes+i]
-                predictedHV[:,i] = predictedHV[:,i]*compute_scaling_factor(mean[1*n_nodes+i])
-            #print(prediction)
-        elif(config.modelType == "BoostedTrees"):
+        if(model_spec["artifact_type"] == "pickle"):
             prediction = nn_model.predict(x.detach().cpu().numpy())
             predictedHV = np.zeros_like(prediction)
             predictionWithHV = torch.from_numpy(prediction.copy())
             n_nodes = config.cellsLength
             for i in range(prediction.shape[1]):
                 prediction[:,i] = prediction[:,i]*std[-24*2+i] + mean[-24*2+i]
+        else:
+            prediction = (nn_model(x).detach().numpy())[:,-1,:]
+            if (calculateOptimalHV):
+                predictedHV, predictionWithHV = getHVnewton(nn_model, x, torch.as_tensor(mean[-24*2:-24*2+input_dim[-1]]/100.0, dtype=torch.float32))
+                initialHV = np.zeros_like(predictedHV)
+            n_nodes = config.cellsLength
+            for i in range(input_dim[-1]):
+                #prediction[:,i] = prediction[:,i]*std[-24*2+i] + mean[-24*2+i]
+                prediction[:,i] = prediction[:,i]*100
+                if (calculateOptimalHV):
+                    predictedHV[:,i] = predictedHV[:,i]*compute_scaling_factor(mean[1*n_nodes+i])
+                    initialHV[:,i] = x[:, -1, 1, i]*compute_scaling_factor(mean[1*n_nodes+i])
         dat_list.append(pandas.DataFrame(prediction))
-        hv_list.append(pandas.DataFrame(predictedHV))
-        stable_dat_list.append(pandas.DataFrame(predictionWithHV.detach().cpu().numpy()))
+        if (calculateOptimalHV):
+            hv_list.append(pandas.DataFrame(predictedHV))
+            hv_list_ini.append(pandas.DataFrame(initialHV))
+            stable_dat_list.append(pandas.DataFrame(predictionWithHV.detach().cpu().numpy()*100))
     end_time = time.perf_counter()
 
     fullPredictionList = pandas.concat(list(dat_list),ignore_index=True)
@@ -239,19 +323,20 @@ def makePredicionList(config, dataManager, experiment_path, savePath, path):
     fullPreductionListWithRun = pandas.concat([runColumn,fullPredictionList],axis=1)
     np.savetxt(path + "predicted/" + savePath+'.txt', fullPreductionListWithRun.values)
 
+    if (calculateOptimalHV):
+        fullHVList = pandas.concat(list(hv_list),ignore_index=True)
+        fullHVList_ini = pandas.concat(list(hv_list_ini),ignore_index=True)
+        fullHVListWithRun = pandas.concat([runColumn,fullHVList,fullHVList_ini],axis=1)
+        np.savetxt(path + "predicted/" + savePath+'HV.txt', fullHVListWithRun.values)
 
-    fullHVList = pandas.concat(list(hv_list),ignore_index=True)
-    fullHVListWithRun = pandas.concat([runColumn,fullHVList],axis=1)
-    np.savetxt(path + "predicted/" + savePath+'HV.txt', fullHVListWithRun.values)
-
-    fullPredictionHVList = pandas.concat(list(stable_dat_list),ignore_index=True)
-    fullPredictionHVListWithRun = pandas.concat([runColumn,fullPredictionHVList],axis=1)
-    np.savetxt(path + "predicted/" + savePath+'Stable.txt', fullPredictionHVListWithRun.values)
+        fullPredictionHVList = pandas.concat(list(stable_dat_list),ignore_index=True)
+        fullPredictionHVListWithRun = pandas.concat([runColumn,fullPredictionHVList],axis=1)
+        np.savetxt(path + "predicted/" + savePath+'Stable.txt', fullPredictionHVListWithRun.values)
 
 
     #plotHiddenFeatures()
 
-    #inject_and_predict_hv_sweep(nn_model, config, dataManager, path, experiment_path)
+    inject_and_predict_hv_sweep(nn_model, config, dataManager, path, experiment_path)
 
     print(f"Prediction time: {end_time - start_time:.6f} seconds")
     print(f"Time per prediction: {(end_time - start_time)*1000.0/xt.shape[0]:.6f} ms")
@@ -323,8 +408,8 @@ def inject_and_predict_hv_sweep(model, config, dataManager, path, experiment_pat
 
         # Un-normalize prediction
         for i in range(nodes_length):
-            prediction[:, i] = prediction[:, i] * std[-2 * cellsLength + i] + mean[-2 * cellsLength + i]
-            #prediction[:, i] = prediction[:, i] * 100
+            #prediction[:, i] = prediction[:, i] * std[-2 * cellsLength + i] + mean[-2 * cellsLength + i]
+            prediction[:, i] = prediction[:, i] * 100
 
         #print(prediction)
 
@@ -395,7 +480,6 @@ def plot_tot_vs_hv_and_heatmap(path, base_filename="predicted_", hv_range=range(
     """
 
 
-
 def draw_predictions_spread(outputs):
     class_hist = outputs.to_numpy()
 
@@ -442,7 +526,7 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
 
     mean, std = readTrainData(path,"")
     for i in range(1):
-        i = 5
+        i = 1
         # Get difference target-prediction in terms of sigma (std) for train and test parts
         #nptable[:,i+1+2*chLength] = (nptable[:,i+1+2*chLength] - nptable[:,i+1])/nptable[:,i+1+chLength]
         #nptable2[:,i+1+2*chLength] = (nptable2[:,i+1+2*chLength] - nptable2[:,i+1])/nptable2[:,i+1+chLength]
@@ -471,6 +555,9 @@ def draw_pred_and_target_vs_run(dftable, dftable2):
 
 def draw_predictions_minus_target(dftable, dftable2):
 
+    mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
+    path = mainPath+"function_prediction/"
+
     # Get length of spacial dimension (e.g. number of channels). Can be changed
     #chLength = int(len(dftable.columns))
     chLength = 24
@@ -483,7 +570,7 @@ def draw_predictions_minus_target(dftable, dftable2):
     bins = np.linspace(-5, 5, 200)
 
     mean, std = readTrainData(path,"")
-    rangeNodes = 12
+    rangeNodes = 6
     rms_train_list = []
     rms_test_list = []
     rolling_std_window = 5  # Adjust this as needed
@@ -540,19 +627,20 @@ def draw_predictions_minus_target(dftable, dftable2):
         scale = nptable[:, i + 1 + chLength].astype(float)
         scale2 = nptable2[:, i + 1 + chLength].astype(float)
         #scale = np.std(nptable2[:, i + 1].astype(float))
-        train_diff = (nptable[:, i + 1] - nptable[:, i + 1 + 2 * chLength]) / 3 / scale
-        test_diff = (nptable2[:, i + 1] - nptable2[:, i + 1 + 2 * chLength]) / 3 / scale2
+        train_diff = (targets_train - predictions_train) / 3 / scale
+        test_diff = (targets_test - predictions_test) / 3 / scale2
 
         shift = 100
         train_diff_delayedCalib = (nptable[shift:, i+1] - nptable[:-shift, i+1]) / (3 * scale[shift:])  #train_diff[k] corresponds to original j = k + 20
         train_diff_referencePoint = (nptable[shift:, i+1] - (nptable[:-shift, i+1] + nptable[shift:, i+1+2*chLength] - nptable[:-shift, i+1+2*chLength] ) ) / (3 * scale[shift:])  
 
-        for val in train_diff[shift:]:
-            htrain_diff.Fill(val)
-        for val in train_diff_delayedCalib:
-            htrain_diff_delayedCalib.Fill(val)
-        for val in train_diff_referencePoint:
-            htrain_diff_referencePoint.Fill(val)
+        if i < 7:
+            for val in train_diff[shift:]:
+                htrain_diff.Fill(val)
+            for val in train_diff_delayedCalib:
+                htrain_diff_delayedCalib.Fill(val)
+            for val in train_diff_referencePoint:
+                htrain_diff_referencePoint.Fill(val)
 
         rms_train = np.sqrt(np.mean(train_diff ** 2))
         rms_test = np.sqrt(np.mean(test_diff ** 2))
@@ -577,10 +665,20 @@ def draw_predictions_minus_target(dftable, dftable2):
     print(f"Robustness: {(avg_rms_train/avg_rms_test)*100:.4f}")
     print(f"Average Precision (train) over {rangeNodes} nodes: {avg_variance_train/avg_variance_train_targets*100:.4f}")
     print(f"Average Precision (test) over {rangeNodes} nodes: {avg_variance_test/rolling_std_test_targets*100:.4f}")
+    config = Config()
+    performance_file = path + f"performance_{config.modelType}_.txt"
+    with open(performance_file, "w") as perf_file:
+        perf_file.write(f"Average RMS (train): {avg_rms_train:.6f}\n")
+        perf_file.write(f"Average RMS (test): {avg_rms_test:.6f}\n")
+        perf_file.write(f"Robustness: {(avg_rms_train/avg_rms_test)*100:.6f}\n")
+        perf_file.write(f"Average Precision (train): {avg_variance_train/avg_variance_train_targets*100:.6f}\n")
+        perf_file.write(f"Average Precision (test): {avg_variance_test/rolling_std_test_targets*100:.6f}\n")
     plt.grid(axis='y', alpha=0.75)
     plt.xlabel('run number')
     plt.ylabel('dE/dx, a.u.')
     #plt.show()
+
+
 
     c = ROOT.TCanvas("c_corr", "corr", 1000, 1000)
     c.SetGridx()
@@ -609,11 +707,11 @@ def draw_predictions_minus_target(dftable, dftable2):
     stats.Draw()
     c.Update()
 
-    if not ROOT.gROOT.IsBatch():
-        try:
-            input("Press Enter to exit and close the plot window...")
-        except KeyboardInterrupt:
-            pass
+    #if not ROOT.gROOT.IsBatch():
+    #    try:
+    #        input("Press Enter to exit and close the plot window...")
+    #    except KeyboardInterrupt:
+    #        pass
 
 
 
@@ -658,7 +756,7 @@ def analyseOutput(predFileName, experiment_path, predFileNameS, experiment_pathS
     dftCorrExpS = dftCorrExpS.join(pTS[list(pTS.columns)])
     #print(dftCorrExpS)
 
-    draw_predictions_spread(dftCorrExp)
+    #draw_predictions_spread(dftCorrExp)
     draw_pred_and_target_vs_run(dftCorrExp, dftCorrExpS)
     draw_predictions_minus_target(dftCorrExp, dftCorrExpS)
     #draw_pred_vs_target(dftCorrExp)
@@ -680,6 +778,7 @@ def predict_cicle(testNum):
     path = mainPath+"function_prediction/"
     predict_nn("tesu",'predicted1_'+str(testNum), path)
     predict_nn("simu",'predicted_'+str(testNum), path)
+    analyseOutput(path+"predicted/predicted_"+str(testNum),path+"simu", path+"predicted/predicted1_"+str(testNum),path+"tesu")
 
 
 if __name__ == "__main__":
@@ -688,8 +787,8 @@ if __name__ == "__main__":
 
     #print("start python predict")
     test = 0
-    predict_nn("tesu",'predicted1_'+str(test), path)
-    predict_nn("simu",'predicted_'+str(test), path)
+    #predict_nn("tesu",'predicted1_'+str(test), path)
+    #predict_nn("simu",'predicted_'+str(test), path)
 
     analyseOutput(path+"predicted/predicted_"+str(test),path+"simu", path+"predicted/predicted1_"+str(test),path+"tesu")
 
@@ -702,6 +801,5 @@ if __name__ == "__main__":
     #analyseOutput(path+"predicted/predictedCosmics1_",path+"tesuCosmic", path+"predicted/predictedCosmics_",path+"simuCosmic")
 
     #analyseOutput(path+"predictedCosmics.parquet",path+"simu.parquet")
-
 
     #plot_tot_vs_hv_and_heatmap(path=path)

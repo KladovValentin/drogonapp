@@ -384,6 +384,157 @@ def compareInitialDistributions(aggregate_all: bool = False):
 
 
 
+def draw_hv_histogram(prediction_file, node_to_plot=0, total_hist_nodes=None, overlay_nodes=None):
+    hv_table = np.loadtxt(prediction_file)
+    if hv_table.ndim == 1:
+        hv_table = hv_table.reshape(1, -1)
+
+    if hv_table.shape[1] < 13:
+        raise ValueError("Expected one run column plus 12 node columns in the HV prediction file.")
+
+    n_nodes = 12
+    histograms = []
+
+    ROOT.TGaxis.SetMaxDigits(3)
+    ROOT.gStyle.SetStripDecimals(True)
+    ROOT.gStyle.SetOptFit(0)
+    ROOT.gStyle.SetOptStat(0)
+
+    def validate_nodes(nodes):
+        validated = list(nodes)
+        for node_idx in validated:
+            if not 0 <= node_idx < n_nodes:
+                raise ValueError(f"Node index {node_idx} is out of range [0, {n_nodes - 1}]")
+        return validated
+
+    def style_histogram(hist, line_color, fill_color=None, fillStyle=3004):
+        hist.GetXaxis().SetTitle("High Voltage [kV]")
+        hist.GetYaxis().SetTitle("Runs Count")
+        hist.GetXaxis().SetTitleSize(0.042)
+        hist.GetYaxis().SetTitleSize(0.042)
+        hist.SetLineColor(line_color)
+        hist.SetLineWidth(2)
+        hist.SetFillColor(fill_color)
+        hist.SetLineWidth(2)
+        hist.SetFillStyle(fillStyle)
+        #if fill_color is not None:
+        #    hist.SetFillColorAlpha(fill_color, 0.35)
+
+    for node_idx in range(n_nodes):
+        node_values = hv_table[:, node_idx + 1].astype(float)
+        mean_val = float(np.mean(node_values))
+        std_val = float(np.std(node_values))
+        hist_min = mean_val - 4.0 * std_val
+        hist_max = mean_val + 4.0 * std_val
+
+        hist = ROOT.TH1D(f"hv_node_{node_idx}", "", 80, hist_min, hist_max)
+        style_histogram(hist, ROOT.kBlue + 1, ROOT.kAzure - 9)
+
+        for value in node_values:
+            hist.Fill(value)
+
+        histograms.append(hist)
+
+    canvas = ROOT.TCanvas("c_hv_distribution", "HV distribution", 1000, 1000)
+    canvas.SetGridx()
+    canvas.SetGridy()
+
+    legend = ROOT.TLegend(0.12, 0.78, 0.42, 0.9)
+
+    if total_hist_nodes is not None:
+        selected_nodes = validate_nodes(total_hist_nodes)
+        combined_values = hv_table[:, np.array(selected_nodes) + 1].reshape(-1)
+        combined_values_original = hv_table[:, np.array(selected_nodes) + n_nodes + 1].reshape(-1)
+        mean_val = float(np.mean(combined_values))
+        std_val = float(np.std(combined_values))
+        hist_min = mean_val - 4.0 * std_val
+        hist_max = mean_val + 4.0 * std_val
+
+        total_hist = ROOT.TH1D("hv_total_hist", "", 80, hist_min, hist_max)
+        style_histogram(total_hist, ROOT.kBlue, ROOT.kBlue-2, 3004)
+        total_hist_original = ROOT.TH1D("total_hist_original", "", 80, hist_min, hist_max)
+        style_histogram(total_hist_original, ROOT.kRed, ROOT.kRed, 3001)
+        for value in combined_values:
+            total_hist.Fill(float(value))
+        for value in combined_values_original:
+            total_hist_original.Fill(float(value))
+
+        total_hist.Draw("hist")
+        total_hist.Fit("gaus", "Q")
+        total_hist_original.Draw("hist same")
+        fit_function = total_hist.GetFunction("gaus")
+        if fit_function:
+            fit_function.SetLineColor(ROOT.kRed + 1)
+            fit_function.SetLineWidth(2)
+            fit_function.Draw("same")
+            legend.AddEntry(fit_function, "Gaussian fit", "l")
+        legend.AddEntry(total_hist, "Optimal HV", "lf")
+        legend.AddEntry(total_hist_original, "Initial HV", "lf")
+
+
+    elif overlay_nodes is not None:
+        selected_nodes = validate_nodes(overlay_nodes)
+        selected_values = [hv_table[:, node_idx + 1].astype(float) for node_idx in selected_nodes]
+        combined_values = np.concatenate(selected_values)
+        hist_min = float(np.min(combined_values))
+        hist_max = float(np.max(combined_values))
+        color_sequence = [
+            ROOT.kBlue + 1,
+            ROOT.kRed + 1,
+            ROOT.kGreen + 2,
+            ROOT.kMagenta + 1,
+            ROOT.kOrange + 7,
+            ROOT.kCyan + 1,
+        ]
+
+        overlay_hists = []
+        for draw_idx, node_idx in enumerate(selected_nodes):
+            node_values = hv_table[:, node_idx + 1].astype(float)
+            hist = ROOT.TH1D(f"hv_overlay_node_{node_idx}", "", 80, hist_min, hist_max)
+            color = color_sequence[draw_idx % len(color_sequence)]
+            style_histogram(hist, color)
+            for value in node_values:
+                hist.Fill(value)
+            overlay_hists.append(hist)
+
+        overlay_hists[0].Draw("hist")
+        legend.AddEntry(overlay_hists[0], f"Optimal HV, node {selected_nodes[0]}", "l")
+        for draw_idx in range(1, len(overlay_hists)):
+            overlay_hists[draw_idx].Draw("hist same")
+            legend.AddEntry(
+                overlay_hists[draw_idx],
+                f"Optimal HV, node {selected_nodes[draw_idx]}",
+                "l",
+            )
+
+    else:
+        if not 0 <= node_to_plot < n_nodes:
+            raise ValueError(f"node_to_plot must be in [0, {n_nodes - 1}]")
+
+        selected_hist = histograms[node_to_plot]
+        selected_hist.Draw("hist")
+        selected_hist.Fit("gaus", "Q")
+        fit_function = selected_hist.GetFunction("gaus")
+        if fit_function:
+            fit_function.SetLineColor(ROOT.kRed + 1)
+            fit_function.SetLineWidth(2)
+            fit_function.Draw("same")
+            legend.AddEntry(fit_function, "Gaussian fit", "l")
+        legend.AddEntry(selected_hist, "Optimal HV", "lf")
+
+    legend.Draw()
+    canvas.Update()
+
+    canvas.SaveAs("qaPlots/optimalHVtotal.pdf")
+    canvas.SaveAs("qaPlots/optimalHVtotal.png")
+
+    if not ROOT.gROOT.IsBatch():
+        try:
+            input("Press Enter to exit and close the plot window...")
+        except KeyboardInterrupt:
+            pass
+
+    return histograms
 
 
 
@@ -392,7 +543,15 @@ def compareInitialDistributions(aggregate_all: bool = False):
 # Example usage:
 if __name__ == "__main__":
     #canvas = plotCorrelations()
-    canvases = compareInitialDistributions()
+    
+    #canvases = compareInitialDistributions()
+    
+    draw_hv_histogram(
+        "serverData/function_prediction/predicted/predicted_0HV.txt",
+        node_to_plot=0,
+        total_hist_nodes=[0,1,2,3,4,5]
+    )
+    
     if not ROOT.gROOT.IsBatch():
         try:
             input("Press Enter to exit and close the plot window...")

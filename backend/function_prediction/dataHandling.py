@@ -11,12 +11,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from tqdm.auto import tqdm
 from pathlib import Path
-from config import Config
+from config import Config, get_model_spec
 
 import torch
 import numpy as np
 import pandas as pd
-from config import Config
+from config import Config, get_model_spec
 from pathlib import Path
 import pyarrow.parquet as pq
 import pyarrow as pa
@@ -69,135 +69,77 @@ def make_graph(config):
 
 def load_dataset(config, df):
     # transform to numpy, assign types, split on features-labels
+    model_spec = get_model_spec(config.modelType)
     cellsLengthToUse = 12
     sentenceLength, cellsLength, channelsLength = config.sentenceLength, config.cellsLength, config.channelsLength
     dfn = df.to_numpy()
 
-    if (config.modelType == "ConvLSTM"):    
-        x = []
-        y = []
-        for i in range(dfn.shape[0]):
-            xi = []
-            yi = []
-            if i<(sentenceLength-1):
-                for j in range(sentenceLength-i-1):
-                    xii = []
-                    yii = dfn[0,-cellsLength:]
-                    for s in range(channelsLength):
-                        xii.append(dfn[0,cellsLength*(s):cellsLength*(s+1)])
-                    xi.append(xii)
-                    yi.append(yii)
-                for j in range(i+1):
-                    xii = []
-                    yii = dfn[j,-cellsLength:]
-                    for s in range(channelsLength):
-                        xii.append(dfn[j,cellsLength*(s):cellsLength*(s+1)])
-                    xi.append(xii)
-                    yi.append(yii)
-            else:
-                for j in range(sentenceLength):
-                    xii = []
-                    yii = dfn[i-sentenceLength+1+j,-cellsLength:]
-                    for s in range(channelsLength):
-                        xii.append(dfn[i-sentenceLength+1+j,cellsLength*(s):cellsLength*(s+1)])
-                    xi.append(xii)
-                    yi.append(yii)
-            x.append(xi)
-            y.append(yi)
-        x = (np.array(x).astype(np.float32))[...,np.newaxis]
-        y = np.array(y).astype(np.float32)
+    if model_spec["input_layout"] != "graph_sequence":
+        raise ValueError(f"Unsupported input layout for modelType {config.modelType}")
 
-    if (config.modelType == "gConvLSTM" or config.modelType == "BoostedTrees"):
-        dfnRun = dfn[:,0]
-        dfnX = dfn[:,1:-2*cellsLength]
-        dfnY = dfn[:,-2*cellsLength:]
-        dfnX = dfnX.reshape((-1,channelsLength,cellsLength))
-        dfnY = dfnY.reshape((-1,2,cellsLength))
+    dfnRun = dfn[:,0]
+    dfnX = dfn[:,1:-2*cellsLength]
+    dfnY = dfn[:,-2*cellsLength:]
+    dfnX = dfnX.reshape((-1,channelsLength,cellsLength))
+    dfnY = dfnY.reshape((-1,2,cellsLength))
 
+    dfnXExtended = np.zeros((dfnX.shape[0],sentenceLength,channelsLength+1,cellsLength))
+    dfnYExtended = np.zeros((dfnY.shape[0],sentenceLength,2,cellsLength))
+    # Fill the new array
+    for i in range(dfnX.shape[0]):
+        sentenceCut = False
+        sentenceCutIndex = 0
+        for j in range(sentenceLength):
+            j1 = sentenceLength - j - 1
+            if j != 0 and ((i - j >= 0) and (dfnRun[i-j+1] - dfnRun[i-j] >= 450)):
+                sentenceCut = True
+                sentenceCutIndex = j
 
-        dfnXExtended = np.zeros((dfnX.shape[0],sentenceLength,channelsLength+1,cellsLength))
-        dfnYExtended = np.zeros((dfnY.shape[0],sentenceLength,2,cellsLength))
-        # Fill the new array
-        for i in range(dfnX.shape[0]):
-            sentenceCut = False
-            sentenceCutIndex = 0
-            for j in range(sentenceLength):
-                j1 = sentenceLength - j - 1
-                if j != 0 and ((i - j >= 0) and (dfnRun[i-j+1] - dfnRun[i-j] >= 450)):       # If the previous run is too old - cut it and substitute with the last valid
-                    sentenceCut = True
-                    #sentenceCutIndex = j-1
-                    sentenceCutIndex = j
-                
-                if j == 0 or ((i - j > 0) and not sentenceCut):    # Only take valid previous indices and check time difference
-                    if (j == 0):
-                        dt_row = np.full((1, cellsLength), 0)      # we are at the i, last word in a sentence, so dt is 0
-                    else:
-                        dt_row = np.full((1, cellsLength), dfnRun[i-j+1] - dfnRun[i-j])      # difference to the next (~relevance)
-                        #dt_row = np.full((1, cellsLength), 0)      # difference to the next (~relevance)
-                    dfnXExtended[i, j1] = np.vstack([dfnX[i - j],dt_row/100.])
-                    #dfnXExtended[i, j1] = dfnX[i - j]
-                    dfnYExtended[i, j1] = dfnY[i - j]
-                    #dfnXExtended[i, j1] = dfnX[i]
+            if j == 0 or ((i - j > 0) and not sentenceCut):
+                if (j == 0):
+                    dt_row = np.full((1, cellsLength), 0)
+                else:
+                    dt_row = np.full((1, cellsLength), dfnRun[i-j+1] - dfnRun[i-j])
+                dfnXExtended[i, j1] = np.vstack([dfnX[i - j],dt_row/100.])
+                dfnYExtended[i, j1] = dfnY[i - j]
 
-                elif (i == 0):                                   # If we are at the beginning of the sequence
-                    dt_row = np.full((1, cellsLength), 0) 
-                    dfnXExtended[i, j1] = np.vstack([dfnX[0],dt_row/100.])
-                    #dfnXExtended[i, j1] = dfnX[0]
-                    dfnYExtended[i, j1] = dfnY[0]
-                    #dfnXExtended[i, j1] = dfnX[i]
+            elif (i == 0):
+                dt_row = np.full((1, cellsLength), 0)
+                dfnXExtended[i, j1] = np.vstack([dfnX[0],dt_row/100.])
+                dfnYExtended[i, j1] = dfnY[0]
 
-                elif (i - j <= 0):                                   # If we are at the beginning of the sequence
-                    dt_row = np.full((1, cellsLength), dfnRun[1] - dfnRun[0]) 
-                    #dt_row = np.full((1, cellsLength), 0) 
-                    dfnXExtended[i, j1] = np.vstack([dfnX[0],dt_row/100.])
-                    #dfnXExtended[i, j1] = dfnX[0]
-                    dfnYExtended[i, j1] = dfnY[0]
-                    #dfnXExtended[i, j1] = dfnX[i]
-                    
+            elif (i - j <= 0):
+                dt_row = np.full((1, cellsLength), dfnRun[1] - dfnRun[0])
+                dfnXExtended[i, j1] = np.vstack([dfnX[0],dt_row/100.])
+                dfnYExtended[i, j1] = dfnY[0]
 
-                elif (sentenceCut):                                 # If we have a situation with a gap between runs
-                    dt_row = np.full((1, cellsLength), dfnRun[i-sentenceCutIndex+1] - dfnRun[i-sentenceCutIndex])
-                    dfnXExtended[i, j1] = np.vstack([dfnX[i - sentenceCutIndex],dt_row/100.])
-                    #dfnXExtended[i, j1] = dfnX[i - sentenceCutIndex]
-                    dfnYExtended[i, j1] = dfnY[i - sentenceCutIndex]
+            elif (sentenceCut):
+                dt_row = np.full((1, cellsLength), dfnRun[i-sentenceCutIndex+1] - dfnRun[i-sentenceCutIndex])
+                dfnXExtended[i, j1] = np.vstack([dfnX[i - sentenceCutIndex],dt_row/100.])
+                dfnYExtended[i, j1] = dfnY[i - sentenceCutIndex]
 
-        x = dfnXExtended[:,:,:,:cellsLengthToUse].astype(np.float32)#.reshape((dfnX.shape[0],sentenceLength,7,12))
-        y = dfnYExtended[:,:,:,:cellsLengthToUse].astype(np.float32)
+    x = dfnXExtended[:,:,:,:cellsLengthToUse].astype(np.float32)
+    y = dfnYExtended[:,:,:,:cellsLengthToUse].astype(np.float32)
 
+    arrayToPlot1 = x[:,-1,1,10]
+    arrayToPlot2 = y[:,-1,0,10]
+    xToPlot = np.arange(0,dfnX.shape[0])
 
-        #print(x[0:5,:,-1,1])
+    #plt.plot(xToPlot, arrayToPlot1, color='#0504aa', label = 'input pressure', marker='o', linestyle="None", markersize=0.8)
+    #plt.plot(xToPlot, arrayToPlot2, color='#8b2522', label = 'target values', marker='o', linestyle="None", markersize=1.7)
 
-        #arrayToPlot1 = x[:,-1,0,0]
-        #arrayToPlot2 = y[:,-1,0,0]
-        #xToPlot = np.arange(0,dfnX.shape[0])
+    #plt.plot(arrayToPlot1, arrayToPlot2, color='#0504aa', label = 'target values', marker='o', linestyle="None", markersize=1.7)
 
-        #plt.plot(xToPlot, arrayToPlot1, color='#0504aa', label = 'input pressure', marker='o', linestyle="None", markersize=0.8)
-        #plt.plot(xToPlot, arrayToPlot2, color='#8b2522', label = 'target values', marker='o', linestyle="None", markersize=1.7)
+    #plt.show()
+    e_ind2, e_att2 = make_graph(config)
 
-        #plt.plot(arrayToPlot1, arrayToPlot2, color='#0504aa', label = 'target values', marker='o', linestyle="None", markersize=1.7)
-
-        #plt.show()
-
-        #print("testing")
-        #print(x[150,-1,:,:])
-        #print(y[150,-1,0,:])
-
-        e_ind2, e_att2 = make_graph(config)
-
-        # extend to the events length size, to forward it to data loader
-        #np.tile(e_ind2, (len(y), 1, 1))
-        #np.tile(e_att2, (len(y), 1, 1))
-
-    #shape: batch, sentence, in_channels, nodes
     print('x shape = ' + str(x.shape))
     print('y shape = ' + str(y.shape))
-    if (config.modelType == "gConvLSTM" or config.modelType == "BoostedTrees"):
-        print('e_ind shape = ' + str(e_ind2.shape))
-        print('e_att shape = ' + str(e_att2.shape))
-        print(torch.LongTensor(e_ind2).movedim(-2,-1))
-        print(e_att2)
-        return (x, y, e_ind2, e_att2)
-    return (x, y)
+    print('e_ind shape = ' + str(e_ind2.shape))
+    print('e_att shape = ' + str(e_att2.shape))
+    print(torch.LongTensor(e_ind2).movedim(-2,-1))
+    print(e_att2)
+    return (x, y, e_ind2, e_att2)
 
 
 def compute_scaling_factor(mean_value, target_range=(1.0, 10.0)):
@@ -245,7 +187,7 @@ class DataManager():
         for i in range(x.shape[2]):
             for j in range(x.shape[3]):
                 if (stdX[i][j]!=0): 
-                    selection = ((x[:,:,i,j]-meanX[i][j])/stdX[i][j]>-5) & ((x[:,:,i,j]-meanX[i][j])/stdX[i][j]<5)
+                    selection = ((x[:,:,i,j]-meanX[i][j])/stdX[i][j]>-10) & ((x[:,:,i,j]-meanX[i][j])/stdX[i][j]<10)
                 x1 = x[:,:,i,j][selection]
                 meanX[i][j] = np.mean(x1)
                 stdX[i][j] = np.std(x1)
@@ -307,8 +249,8 @@ class DataManager():
 
         for i in range(cellsLength):
             #df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]])/compute_scaling_factor(meanValuesTargets[i])
-            #df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]]/100.0)
-            df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]]-meanValuesTargets[i])/stdValuesTargets[i]
+            df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]]/100.0)
+            #df[columns[targetColumns[0,i]]] = (df[columns[targetColumns[0,i]]]-meanValuesTargets[i])/stdValuesTargets[i]
             df[columns[targetColumns[1,i]]] = (df[columns[targetColumns[1,i]]]/compute_scaling_factor(meanValuesTargets[i+cellsLength]))     # for target errors to be around 1 for custom MSE loss
             #df[columns[targetColumns[1,i]]] = (df[columns[targetColumns[1,i]]]/stdValuesTargets[i])
 
@@ -402,11 +344,6 @@ class DataManager():
 
 
         ### drop columns that are not needed    
-        #for i in range(7+2):
-        #    for j in range(12):
-        #        print(columns[24*i+j+12+1])
-        #        setTable = setTable.drop(columns[24*i+j+12+1], axis=1)
-        #print(setTable)
         #for i in range(12):
         #    setTable = setTable.drop(columns[24*1+i+1], axis=1)
         #    setTable = setTable.drop(columns[24*2+i+1], axis=1)
@@ -434,7 +371,7 @@ class DataManager():
         #print(dftCorr)
         
 
-        baseTrainRange = int(dftCorr.shape[0]*0.8)
+        baseTrainRange = int(dftCorr.shape[0]*0.6)
         #leftRange = int((dftCorr.shape[0] - baseTrainRange)/30)
         leftRange = int((dftCorr.shape[0] - baseTrainRange))
         retrainIndex = ind
@@ -448,8 +385,8 @@ class DataManager():
             #dftTV = dftCorr.iloc[int(dftCorr.shape[0]*0.2):baseTrainRange].copy()
             dftTV = dftCorr.iloc[:retrain1].copy()
         else:
-            #dftTV = dftCorr.iloc[retrain0:retrain1].copy()
-            dftTV = dftCorr.iloc[:retrain1].copy()
+            dftTV = dftCorr.iloc[retrain0:retrain1].copy()
+            #dftTV = dftCorr.iloc[:retrain1].copy()
         dftTrainV = dftTV.copy()
         dftTest = dftCorr.iloc[retrain1:retrain2].copy()
 
@@ -494,7 +431,7 @@ class DataManager():
         dir = str(Path(__file__).parents[1])
         #dftCorr = self.getDataset(self.mainPath + "nn_input/outNNFitTarget.dat")      # main that was used before cosmic tries
         #dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_10mins.dat")     # for cosmics
-        dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_56_9.dat")     # for cosmics
+        dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_106_9.dat")     # for cosmics
         #dftTrainV = self.getDataset(self.mainPath + "nn_input/outNNFitTargetCosmic25_56106_9.dat")     # for cosmics
         #print(dftCorr)
         

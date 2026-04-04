@@ -17,11 +17,11 @@ import pyarrow.parquet as pq
 from tqdm.auto import tqdm
 from tqdm import trange
 from pympler import asizeof
-from models.model import Conv2dLSTM
 from models.model import BoostedTreesRegressor
 from models.model import GCNLSTM
 from models.model import GraphTransformer2D
 from dataHandling import My_dataset, Graph_dataset, DataManager, load_dataset
+from config import get_model_spec
 from predict import predict_cicle
 
 
@@ -41,8 +41,9 @@ class CustomMSELoss(nn.Module):
 
     def forward(self, predictions, targets):
         squared_errors = torch.pow(predictions - targets[:,:,0,:], 2)
-        clipped_sigmas = torch.where(targets[:,:,1,:] < 0.1, torch.ones_like(targets[:,:,1,:]), targets[:,:,1,:])
-        normalized_errors = squared_errors / torch.pow(clipped_sigmas, 2)
+        clipped_sigmas = torch.where(targets[:,:,1,:] < 0.1, torch.ones_like(targets[:,:,1,:])*10, targets[:,:,1,:])
+        normalized_errors = squared_errors / torch.pow(clipped_sigmas, 1)
+        #normalized_errors = squared_errors / torch.pow(clipped_sigmas, 2)
         #normalized_errors = squared_errors / targets[:,:,1,:]
         #print(normalized_errors)
         loss = torch.mean(normalized_errors)
@@ -130,7 +131,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
     early_stopperEMA = EarlyStopperEMA()
     #xt0 = torch.tensor()
     #xv0 = torch.tensor()
-    ts = 5
+    ts = 1
 
     for epoch in range(num_epochs):
         model.train()
@@ -188,6 +189,8 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
             fulfulYAmount+=fullYAmount
             std = yAccTest.std(dim=0, unbiased=False).mean()
             #std = y[:,-1,1,:]*2
+            #print(prediction[:,-1,10])
+            #print(yAccTest)
             running_acc = torch.sum( ((prediction[:,-1,:]-yAccTest)>-std/3) & ((prediction[:,-1,:]-yAccTest)<std/3) )
             #running_acc = torch.sum( ((prediction-yAccTest)>-0.3) & ((prediction-yAccTest)<0.3) )
             #print(running_acc)
@@ -263,7 +266,7 @@ def train_DN_model(model, train_loader, loss, optimizer, num_epochs, valid_loade
         #    print(xt0,xv0)
         print("Average loss: %f, valid loss: %f, Train accuracy: %f, V acc: %f, epoch: %f" % (loss_train, loss_valid, accuracy_train*100, accuracy_valid*100, epoch+1))
 
-        if (epoch > 10):
+        if (epoch > 20):
             #if (early_stopper.early_stop(loss_valid*100)):
             if (early_stopperEMA.step(loss_valid*100)):
                 break
@@ -319,6 +322,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_o
     config = Config()
     if model_type_override is not None:
         config.modelType = model_type_override
+    model_spec = get_model_spec(config.modelType)
     print("start nn training")
 
     transferTraining = transfer
@@ -340,20 +344,23 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_o
         
         batch_size = 64 #50000 #512
         #batch_size = 32 #50000 #512
-        weight_decay = 0.0001
+        weight_decay = 0.0101
         lr = 0.005
         epochs = 100
+        step_size = 5
         if (transferTraining):
             #lr = 0.02
-            lr = 0.01
+            lr = 0.08
             if (ind == 0):
-                epochs = 100  #cosmic
+                epochs = 1000  #cosmic
+                step_size = 50
             #epochs = 40  #new beam time
             if (ind >= 1):
-                epochs = 20  #going back from cosmic
+                epochs = 100  #going back from cosmic
                 lr = lr*0.1
+                step_size = 5
             #weight_decay = 0.0005
-            weight_decay = 0.0001
+            weight_decay = 0.00001
             #weight_decay = 0.0
         nLayers = 1
         nNeurons = 200
@@ -370,100 +377,93 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_o
         #validTable = dataTable.copy()
         #else:
 
-        validShuffled = True
-
-        xf, yf, e_i, e_a = load_dataset(config,dftCorr.copy())
-
-        if (transferTraining):
-            dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*1.0)].copy()
-        else:
-            dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*0.8)].copy()
-        validTable = dftCorr.drop(dataTable.index)
-
         
-        if (config.modelType == "gConvLSTM"):
-            if (not validShuffled):
-                xt, yt, e_i, e_a = load_dataset(config,dataTable)   #when split is consequent
-                xv, yv, _, _ = load_dataset(config,validTable)      #when split is consequent
-                shuffled_indicest = np.random.permutation(xt.shape[0])
-                shuffled_indicest1 = np.random.permutation(xv.shape[0])
-                #print(shuffled_indicest)
-                xt = xt[shuffled_indicest]
-                yt = yt[shuffled_indicest]
-                xv = xv[shuffled_indicest1]
-                yv = yv[shuffled_indicest1]
+        # Shuffling and splitting on valid and train (we anyway have to shuffle each, but split order is different)
+        validShuffled = True
+        splitShare = 0.8
+        if (transferTraining and ind == 0):
+            splitShare = 1.0
+        maxThreshValid = min(splitShare,0.8)
+        if (validShuffled):
+            # First load the whole dataset, shuffle, and only then split
+            xf, yf, e_i, e_a = load_dataset(config,dftCorr.copy())
+            shuffled_indicesf = np.random.permutation(xf.shape[0])
+            xt = xf[shuffled_indicesf]#[0:int(xf.shape[0]*splitShare)]
+            yt = yf[shuffled_indicesf]#[0:int(xf.shape[0]*splitShare)]
+            xv = xf[shuffled_indicesf]#[int(xf.shape[0]*maxThreshValid):int(xf.shape[0]*1.0)]
+            yv = yf[shuffled_indicesf]#[int(xf.shape[0]*maxThreshValid):int(xf.shape[0]*1.0)]
 
-            elif (validShuffled):
-                shuffled_indicesf = np.random.permutation(xf.shape[0])
-                xt = xf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
-                yt = yf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
-                xv = xf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
-                yv = yf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
-            #if (ind == -1):
-            #    xt[:,:,1,:] = 1.750 + np.random.normal(0,0.05)  # set HV for constant to not affect the experimental training
-            
-            train_dataset = My_dataset((xt,yt))
-            valid_dataset = My_dataset((xv,yv))
-        elif (config.modelType == "BoostedTrees"):
-            if (validShuffled):
-                shuffled_indicesf = np.random.permutation(xf.shape[0])
-                xt = xf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
-                yt = yf[shuffled_indicesf][0:int(xf.shape[0]*0.8)]
-                xv = xf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
-                yv = yf[shuffled_indicesf][int(xf.shape[0]*0.8):int(xf.shape[0]*1.0)]
+        elif (not validShuffled):
+            #First split on first (train) and second (valid), then load datasets and shuffle
+            if (transferTraining):
+                dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*1.0)].copy()
             else:
-                xt, yt, _, _ = load_dataset(config, dataTable)
-                xv, yv, _, _ = load_dataset(config, validTable)
-        else:
-            xt, yt = load_dataset(config, dataTable)
-            xv, yv = load_dataset(config,validTable)
+                dataTable = dftCorr.iloc[:int(dftCorr.shape[0]*0.8)].copy()
+            validTable = dftCorr.drop(dataTable.index)
+
+            xt, yt, e_i, e_a = load_dataset(config,dataTable)
+            xv, yv, _, _ = load_dataset(config,validTable)
             shuffled_indicest = np.random.permutation(xt.shape[0])
-            #xt = xt[shuffled_indicest]
-            #yt = yt[shuffled_indicest]
-            train_dataset = My_dataset((xt,yt))
-            valid_dataset = My_dataset((xv,yv))
+            shuffled_indicest1 = np.random.permutation(xv.shape[0])
+            xt = xt[shuffled_indicest]
+            yt = yt[shuffled_indicest]
+            xv = xv[shuffled_indicest1]
+            yv = yv[shuffled_indicest1]
 
-        if (config.modelType != "BoostedTrees"):
-            dropLastT = False
-            if (dataTable.shape[0]%batch_size==1):
-                dropLastT = True
-            dropLastV = False
-            if (validTable.shape[0]%batch_size==1):
-                dropLastV = True
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=dropLastT)
-            valid_loader = DataLoader(valid_dataset, batch_size=batch_size, drop_last=dropLastV)
+            del validTable, dataTable
 
-            input_dim = train_dataset[0][0].shape
 
-            del validTable, valid_dataset
-        else:
-            input_dim = xt.shape[1:]
+        train_dataset = My_dataset((xt,yt))
+        valid_dataset = My_dataset((xv,yv))
+        dropLastT = (xt.shape[0]%batch_size==1)
+        dropLastV = (xv.shape[0]%batch_size==1)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, drop_last=dropLastT)
+        valid_loader = DataLoader(valid_dataset, batch_size=batch_size, drop_last=dropLastV)
 
-        if (config.modelType == "ConvLSTM"):
-            nn_model = Conv2dLSTM(input_size=(input_dim[-3],input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=(5,5), num_layers=1, bias=0, output_size=1) #16 16
-        elif (config.modelType == "gConvLSTM"):
-            #nn_model = GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=8, hidden_size=16, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-            nn_model = GCNLSTM(input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1, e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-            #nn_model = GraphTransformer2D(input_size = input_dim[-2], embedding_size=8, num_nodes = input_dim[-1], sentence_length = input_dim[-3], e_i=(torch.LongTensor(e_i).movedim(-2,-1)), e_a=torch.Tensor(e_a))
-            
+        input_dim = train_dataset[0][0].shape
 
-            n_nodes = input_dim[-1]
-            in_channels = input_dim[-2]
-            sent_length = input_dim[-3]
-            #exported_program = torch.export.export(GCNLSTM(input_size=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=2, num_layers=1), (torch.randn(2, sent_length, in_channels, n_nodes),))
-            #torch.export.save(exported_program, 'exported_gConvLSTM.pt2')
-        elif (config.modelType == "BoostedTrees"):
+        del valid_dataset, train_dataset
+
+        # input always has the same amount of channels, sentence length and n_nodes (graph) independently of a model
+        n_nodes = input_dim[-1]
+        in_channels = input_dim[-2]
+        sent_length = input_dim[-3]
+
+        if (model_spec["model_family"] == "gcn_lstm"):
+            nn_model = GCNLSTM( input_dims=(input_dim[-2],input_dim[-1]), embedding_size=16, hidden_size=16, kernel_size=3, num_layers=1,
+                e_i=(torch.LongTensor(e_i).movedim(-2,-1)),
+                e_a=torch.Tensor(e_a),
+                gcn_cell_type=model_spec.get("gcn_cell_type", "spectral"),
+                sequence_source=model_spec.get("sequence_source", "hidden_state"),
+            )
+        elif (model_spec["model_family"] == "graph_transformer"):
+            nn_model = GraphTransformer2D(
+                input_size=input_dim[-2],
+                embedding_size=8,
+                num_nodes=input_dim[-1],
+                sentence_length=input_dim[-3],
+                e_i=(torch.LongTensor(e_i).movedim(-2,-1)),
+                e_a=torch.Tensor(e_a),
+            )
+        elif (model_spec["model_family"] == "boosted_trees"):
             nn_model = BoostedTreesRegressor(
-                max_depth=3,
-                learning_rate=0.05,
-                max_iter=300,
-                min_samples_leaf=15,
-                l2_regularization=1e-3,
+                max_depth=2,
+                learning_rate=0.04,
+                max_iter=90,
+                min_samples_leaf=70,
+                max_leaf_nodes=10,
+                l2_regularization=0.35,
                 random_state=42,
             )
+        else:
+            raise ValueError(f"Unsupported model family: {model_spec['model_family']}")
 
-        if (transferTraining and config.modelType != "BoostedTrees"):
-            nn_model.load_state_dict(torch.load(mainPath+"function_prediction/tempModelT.pt"))
+
+        if (transferTraining):
+            nn_model.load_state_dict(torch.load(mainPath+"function_prediction/"+model_spec["artifact_name"]))
+            if (ind == 0):
+                with torch.no_grad():
+                    nn_model.film.scale.fill_(0.5413)
             #nn_model.hv_mlp.apply(reset_weights)
             nn_model.train()
             # Freeze the lower layers
@@ -475,11 +475,11 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_o
                 #if "input_normalizer" in name or "scale_shift" in name or "nn_model." or "linear" in name:           # cosmic things
                 if (ind == 0):
                     #if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name or "hv_mlp" in name or "linear" in name:           # cosmic things
-                    if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name or "hv_mlp" in name:           # cosmic things
+                    #if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name or "hv_mlp" in name:           # cosmic things
                     #if "input_normalizer" in name or "scale_shift" in name or "nn_model2.0" in name or "nn_model2.1" in name or "nn_model2.3" in name or "film" in name:           # cosmic things
                     #if "input_normalizer" in name or "scale_shift" in name or "gcn_cell" in name or "film" in name:           # cosmic things
                     #if "input_normalizer" in name or "scale_shift" in name or "linear" in name or "film" in name:           # cosmic things
-                    #if "input_normalizer" in name or "scale_shift" in name or "film" in name:           # cosmic things
+                    if "input_normalizer" in name or "scale_shift" in name or "film" in name:           # cosmic things
                     #if "input_normalizer" in name or "scale_shift" in name or "nn_model." in name or "film" in name:           # cosmic things
                     #if "input_normalizer" in name or "scale_shift"  in name or "gcn_cell_list" in name:           # cosmic things
                     #if "input_normalizer" in name or "scale_shift" in name or "hv_mlp" in name:           # cosmic things
@@ -491,7 +491,7 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_o
                     #if "input_normalizer" in name or "scale_shift" in name or "linear" in name:                               #exp hv inference from cosmic
                     if "input_normalizer" in name or "scale_shift" in name:
                         trainable = True
-                trainable = True
+                #trainable = True
                 #if "input_normalizer" in name or "scale_shift" in name or "nn_model2." in name:
                 if (trainable):
                     param.requires_grad = True
@@ -513,13 +513,13 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_o
             loss.loss_type = "customMSE"
 
         #optimizer = optim.SGD(nn_model.parameters(), lr=0.1, momentum=0.9, weight_decay=0.05)
-        if (config.modelType == "BoostedTrees"):
+        if (model_spec["model_family"] == "boosted_trees"):
             print("prepared to train boosted trees")
             loc_acc, loss_train, loss_valid = train_boosted_tree_model(nn_model, xt, yt, xv, yv, lossType)
         else:
             optimizer = optim.AdamW(nn_model.parameters(), lr=lr, betas=(0.5, 0.9), weight_decay=weight_decay)
 
-            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.75)
+            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.75)
             #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, threshold=0.2, factor=0.2)
 
             print("prepared to train nn")
@@ -529,17 +529,15 @@ def train_NN(ind,transfer,mainPath, simulation_path="simu.parquet", model_type_o
 
         f.write(str(batch_size) + " " + str(lr) + " " + str(nNeurons) + " " + str(nLayers) + " " + str(weight_decay) + " " + str(100*loc_acc) + "\n")
 
-        if (config.modelType == "BoostedTrees"):
-            with open(mainPath+"function_prediction/tempModelBoosted.pkl", "wb") as model_file:
+        if (model_spec["artifact_type"] == "pickle"):
+            with open(mainPath+"function_prediction/"+model_spec["artifact_name"], "wb") as model_file:
                 pickle.dump(nn_model, model_file)
-        else:
+        elif (model_spec["artifact_type"] == "torch"):
             nn_model.eval()
-            torch.save(nn_model.state_dict(), mainPath+"function_prediction/tempModelT.pt")
+            torch.save(nn_model.state_dict(), mainPath+"function_prediction/"+model_spec["artifact_name"])
         #nn_model = torch.jit.script(nn_model)
 
-        if (config.modelType == "ConvLSTM"):
-            modelRandInput = torch.randn(1, input_dim[0], input_dim[-3], input_dim[-2], input_dim[-1])
-        elif (config.modelType == "gConvLSTM"):
+        if (model_spec["artifact_type"] == "torch"):
             n_nodes = input_dim[-1]
             in_channels = input_dim[-2]
             sent_length = input_dim[-3]
@@ -576,11 +574,11 @@ if __name__ == "__main__":
     mainPath = "/home/localadmin_jmesschendorp/gsiWorkFiles/realTimeCalibrations/backend/serverData/"
     dataManager = DataManager(mainPath)
 
-    dataManager.manageDataset("train_nn",0)
+    #dataManager.manageDataset("train_nn",0)
     #dataManager.manageDataset("test_nn",0)
 
     #dataManager.manageDataset("test_nn",0)
-    train_NN(0,False,mainPath)
+    #train_NN(0,False,mainPath)
     #train_NN(0,True,mainPath)
 
 
@@ -596,10 +594,11 @@ if __name__ == "__main__":
 
     #for i in range(20):
     #    dataManager.manageDataset("test_nn",i+1)
-        #train_NN(i+1,True,mainPath)
+    #    train_NN(i+1,True,mainPath)
     #    train_NN(i+1,False,mainPath)
     #    predict_cicle(i+1)
 
     # back to beam time with fixed hv_mlp and nn_model
     #dataManager.manageDataset("train_nn",0)
+    #dataManager.manageDataset("test_nn",0)
     #train_NN(1,True,mainPath)
